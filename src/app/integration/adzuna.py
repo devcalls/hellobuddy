@@ -4,15 +4,50 @@ from app.models.job import JobPosting, JobSearch
 from typing import List
 import urllib.parse
 
+ADZUNA_URL_TEMPLATE = "https://api.adzuna.com/v1/api/jobs/{COUNTRY_CODE}/search/1"
+
 class AdzunaProvider(BaseJobProvider):
     def __init__(self, app_id: str, app_key: str):
         self.app_id = app_id
         self.app_key = app_key
-        self.base_url = "https://api.adzuna.com/v1/api/jobs/gb/search/1"
+        
 
     @property
     def name(self) -> str:
         return "Adzuna"
+    
+    def map_country_for_adzuna(self, v: str) -> str:
+        """Translates human-readable countries to Adzuna API country codes."""
+        v_lower = v.lower().strip()
+        
+        # Map common inputs to Adzuna's specific ISO-like codes
+        country_map = {
+            # United Kingdom
+            'uk': 'gb', 'united kingdom': 'gb', 'great britain': 'gb', 'england': 'gb',
+            # United States
+            'us': 'us', 'usa': 'us', 'united states': 'us', 'america': 'us',
+            # North & South America
+            'canada': 'ca', 
+            'brazil': 'br',
+            # Europe
+            'germany': 'de', 
+            'france': 'fr', 
+            'italy': 'it', 
+            'netherlands': 'nl', 'the netherlands': 'nl',
+            'austria': 'at', 
+            'poland': 'pl', 
+            'russia': 'ru',
+            # Asia / Pacific
+            'india': 'in', 
+            'singapore': 'sg', 
+            'australia': 'au', 
+            'new zealand': 'nz',
+            # Africa
+            'south africa': 'za'
+        }
+        
+        # Return the mapped value. If it's already "gb" or not in the dictionary, return it as-is.
+        return country_map.get(v_lower, v_lower)
     
     async def search(self, job_search: JobSearch) -> List[JobPosting]:
         query = self.get_query_by_provider(job_search.query_params, self.name)
@@ -36,8 +71,13 @@ class AdzunaProvider(BaseJobProvider):
             "results_per_page": 50
         }
         
+        country = job_search.country
+        country_norm = self.map_country_for_adzuna(country)
+        base_url = ADZUNA_URL_TEMPLATE.format(COUNTRY_CODE=country)
+        print('base_url' + base_url)
+        
         async with httpx.AsyncClient() as client:
-            response = await client.get(self.base_url, params=params)
+            response = await client.get(base_url, params=params)
             if response.status_code != 200:
                 return []
                 
