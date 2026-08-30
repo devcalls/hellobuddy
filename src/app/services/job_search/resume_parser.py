@@ -1,9 +1,9 @@
 import os
 from typing import List
-from services.llm_drivers import GroqDriver
+from app.services.job_search.llm_drivers import GroqDriver
 from pypdf import PdfReader
-from models.resume import ResumeMetadata
-from prompts.resume import FILTER_PROMPT
+from app.models.resume import ResumeMetadata
+from app.prompts.resume import FILTER_PROMPT
 from pydantic import ValidationError
 
 RESUME_METADATA_FILE_NAME = "resume_metadata.json"

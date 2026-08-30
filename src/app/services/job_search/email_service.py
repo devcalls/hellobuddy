@@ -3,7 +3,7 @@ import mailtrap as mt
 import smtplib
 
 from pydantic import BaseModel, EmailStr
-from config.settings import AppSettings
+from app.config.job_settings import JobSearchSettings
 #from config.config import ConfigManager
 
 
@@ -14,7 +14,7 @@ class EmailNotificationRequest(BaseModel):
 
 
 class EmailService:
-    def __init__(self, settings: AppSettings):
+    def __init__(self, settings: JobSearchSettings):
         self.settings = settings
     
     def background_send_email_task(self, recipient: str, subject: str, html_body: str):

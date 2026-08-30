@@ -5,4 +5,4 @@
 
 ---
 
-For detailed setup guides, please read the [Instructions Document](docs/Instructions.md).
+For detailed setup guides, please read the [Instructions Document](docs/JobSearchInstructions.md).

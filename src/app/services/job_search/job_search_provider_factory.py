@@ -1,11 +1,11 @@
-from integration.reed import ReedProvider
-from integration.adzuna import AdzunaProvider
-from integration.serp import SerpProvider
+from app.integration.reed import ReedProvider
+from app.integration.adzuna import AdzunaProvider
+from app.integration.serp import SerpProvider
 #from config.config import ConfigManager
-from config.settings import AppSettings
+from app.config.job_settings import JobSearchSettings
 
 class JobSearchProviderFactory():
-    def __init__(self, settings: AppSettings):
+    def __init__(self, settings: JobSearchSettings):
         #self.config_manager = config_manager
         self.settings = settings
     

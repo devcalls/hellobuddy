@@ -1,8 +1,8 @@
 import os
 import json
 from typing import List, Dict, Set
-from models.job import JobPosting 
-from util.file_handler import read_json_from_file, write_json_list_to_file
+from app.models.job import JobPosting 
+from app.util.file_handler import read_json_from_file, write_json_list_to_file
 
 class LocalJobHistory:
     def __init__(self, history_file_path: str, history_filename: str = "job_history.json"):

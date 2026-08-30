@@ -1,6 +1,6 @@
 import httpx
-from integration.job_provider import BaseJobProvider
-from models.job import JobPosting, JobSearch
+from app.integration.job_provider import BaseJobProvider
+from app.models.job import JobPosting, JobSearch
 from typing import List
 
 class ReedProvider(BaseJobProvider):

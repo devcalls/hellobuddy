@@ -5,10 +5,10 @@ import signal
 import asyncio
 import os
 
-from services.scheduler import  setup_scheduler
-from services.job_orchestrator_service import extract_jobs_send_email, orchestrate
+from app.services.job_search.scheduler import  setup_scheduler
+from app.services.job_search.job_orchestrator_service import extract_jobs_send_email, orchestrate
 #from config.config import ConfigManager
-from config.settings import AppSettings
+from app.config.job_settings import JobSearchSettings
 import os
 
 def display_welcome_screen():
@@ -56,7 +56,7 @@ def main():
     try:
         # Load the scheduled time from config
         #config_manager = ConfigManager()
-        settings = AppSettings()
+        settings = JobSearchSettings()
         #scheduled_time = config_manager.get_value("SCHEDULER", "JOB_TIME")
         scheduled_time = settings.scheduler.schedule_time
         

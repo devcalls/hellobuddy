@@ -3,12 +3,12 @@ import json
 import os
 import markdown
 #from config.config import ConfigManager
-from config.settings import AppSettings
-from models.job import JobPosting
+from app.config.job_settings import JobSearchSettings
+from app.models.job import JobPosting
 from typing import List
 
 class JobScrapingService:
-    def __init__(self, settings: AppSettings):
+    def __init__(self, settings: JobSearchSettings):
         #self.config_manager = ConfigManager()
         self.settings = settings
         #self.api_key = self.config_manager.get_value("API_KEYS", "SERPAPI_KEY")

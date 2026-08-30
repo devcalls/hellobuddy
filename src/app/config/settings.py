@@ -1,7 +1,7 @@
 import sys
 import configparser
 from pathlib import Path
-from typing import Any, Dict, Type, Optional
+from typing import Any, Dict, Type, Optional, ClassVar
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict, InitSettingsSource, PydanticBaseSettingsSource
 from typing_extensions import Annotated
@@ -16,7 +16,7 @@ current_dir = Path(__file__).resolve().parent
 
 # 1. Custom INI Source Parser
 class IniConfigSettingsSource(PydanticBaseSettingsSource):
-    def __init__(self, settings_cls: Type[BaseSettings], ini_file_path: str = "config.ini"):
+    def __init__(self, settings_cls: Type[BaseSettings], ini_file_path: str):
         super().__init__(settings_cls)
         # Store just the filename string so we can combine it with our dynamic root path
         self.config_filename = ini_file_path
@@ -62,47 +62,13 @@ class IniConfigSettingsSource(PydanticBaseSettingsSource):
         return settings_dict
 
 
-# 2. Section Sub-Models
-class StorageSettings(BaseModel):
-    app_data_path: str
-    resume_file_path: BlankToNone = Field(default=None)
-
-
-class EmailSettings(BaseModel):
-    recipient: str
-
-
-class SchedulerSettings(BaseModel):
-    schedule_time: str = Field(default=None)
-
-
-class ApiKeysSettings(BaseModel):
-    serp_api_key: BlankToNone = Field(default=None)
-    mailtrap_api_token: str
-    reed_api_key: BlankToNone = Field(default=None)
-    adzuna_app_key: BlankToNone = Field(default=None)
-    adzuna_app_id: BlankToNone = Field(default=None)
-
-
-class SearchSettings(BaseModel):
-    search_query_serp:BlankToNone = Field(default=None) 
-    search_query_reed:BlankToNone = Field(default=None) 
-    search_query_adzuna:BlankToNone = Field(default=None) 
-    search_query: str
-    search_location: str
-    search_country: str
-    num_pages: int
-
-
-# 3. Core Settings Class
-class AppSettings(BaseSettings):
+class BaseFeatureSettings(BaseSettings):
+    """
+    Base settings class. All feature settings must inherit from this.
+    Child classes MUST define `INI_FILE_PATH`.
+    """
     model_config = SettingsConfigDict(case_sensitive=False)
-
-    storage: StorageSettings
-    email: EmailSettings
-    scheduler: SchedulerSettings
-    api_keys: ApiKeysSettings
-    search_settings: SearchSettings
+    INI_FILE_PATH: ClassVar[str] = "default.ini"
 
     @classmethod
     def settings_customise_sources(
@@ -113,45 +79,10 @@ class AppSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
+        
+        ini_file = getattr(settings_cls, "INI_FILE_PATH", "default.ini")
         return (
             init_settings,
             env_settings,
-            IniConfigSettingsSource(settings_cls, ini_file_path="config.ini"),
+            IniConfigSettingsSource(settings_cls, ini_file_path=ini_file),
         )
-
-
-# ==========================================
-# Example Usage
-# ==========================================
-if __name__ == "__main__":
-    settings = None
-    try:
-        settings = AppSettings()
-        print("✅ Settings loaded successfully!\n")
-    except (ValidationError, FileNotFoundError) as e:
-        print("\n❌ Configuration Error detected!")
-        
-        if isinstance(e, FileNotFoundError):
-            print(e)
-        else:
-            print("Please check your 'config.ini' file or environment variables.\n")
-            for error in e.errors():
-                location = " -> ".join(str(p) for p in error["loc"])
-                message = error["msg"]
-                print(f"  • [{location}]: {message}")
-        
-        sys.exit(1)
-
-    # safe printing if settings loaded properly
-    print("--- Storage Configurations ---")
-    print(f"Resume Path: {settings.storage.resume_file_path}")
-    print(f"App Data Path: {settings.storage.app_data_path}")
-    
-    print("\n--- Scheduler Configurations ---")
-    print(f"Time: {settings.scheduler.schedule_time}")
-    
-    print("\n--- Search Configurations ---")
-    print(f"Pages to scan: {settings.search_settings.num_pages}")
-    
-    print("\n--- API Keys ---")
-    print(f"Mailtrap Token: {settings.api_keys.mailtrap_api_token}")

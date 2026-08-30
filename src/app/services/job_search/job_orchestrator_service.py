@@ -1,26 +1,26 @@
-from services.job_scraping_service import JobScrapingService
+from app.services.job_search.job_scraping_service import JobScrapingService
 #from config.config import ConfigManager
-from config.settings import AppSettings
-from services.email_service import EmailService
-from services.scheduler import setup_scheduler
+from app.config.job_settings import JobSearchSettings
+from app.services.job_search.email_service import EmailService
+from app.services.job_search.scheduler import setup_scheduler
 from datetime import datetime
 from pathlib import Path
 import glob
 import os
 import asyncio
 from typing import List
-from util.file_handler import read_json_from_file, write_json_list_to_file, get_absolute_path, create_folder
-from services.job_filter_service import JobFilterService
-from services.job_search_engine import JobSearchEngine
-from services.job_search_provider_factory import JobSearchProviderFactory
-from services.job_history import LocalJobHistory
-from models.job import JobPosting, JobSearch
+from app.util.file_handler import read_json_from_file, write_json_list_to_file, get_absolute_path, create_folder
+from app.services.job_search.job_filter_service import JobFilterService
+from app.services.job_search.job_search_engine import JobSearchEngine
+from app.services.job_search.job_search_provider_factory import JobSearchProviderFactory
+from app.services.job_search.job_history import LocalJobHistory
+from app.models.job import JobPosting, JobSearch
 
 RAW_JOB_POOL_FILENAME = "raw_job_pool.json"
 REPORT_FOLDER = 'reports'
 
 class JobOrchestratorService:
-    def __init__(self, settings: AppSettings):
+    def __init__(self, settings: JobSearchSettings):
         #self.config_manager = ConfigManager()
         self.settings = settings
         self.job_scraping_service = JobScrapingService(settings)
@@ -148,7 +148,7 @@ class JobOrchestratorService:
         self.email_service.background_send_email_task(self.settings.email.recipient, "Job Match Alert from Hello Buddy", html_body)
 
 
-def extract_jobs_send_email(settings: AppSettings):
+def extract_jobs_send_email(settings: JobSearchSettings):
     
     query = settings.search_settings.search_query
     location = settings.search_settings.search_location
@@ -157,7 +157,7 @@ def extract_jobs_send_email(settings: AppSettings):
     #job_orchestrator.extract_jobs_send_email(query, location, country)  
     job_orchestrator.filter_jobs()
     
-def orchestrate(settings: AppSettings):
+def orchestrate(settings: JobSearchSettings):
     
     job_orchestrator = JobOrchestratorService(settings)
     asyncio.run(job_orchestrator.orchestrate())

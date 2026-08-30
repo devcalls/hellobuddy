@@ -1,10 +1,10 @@
 import asyncio
 from typing import List, Dict, Any
 
-from integration.job_provider import BaseJobProvider
-from models.job import JobPosting, JobSearch
-from integration.adzuna import AdzunaProvider
-from services.job_history import LocalJobHistory
+from app.integration.job_provider import BaseJobProvider
+from app.models.job import JobPosting, JobSearch
+from app.integration.adzuna import AdzunaProvider
+from app.services.job_search.job_history import LocalJobHistory
 
 class JobSearchEngine:
     def __init__(self, providers: List[BaseJobProvider], job_history: LocalJobHistory):

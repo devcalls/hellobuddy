@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hellobuddy"
+version = "0.1.0"
+description = "Hellobuddy agent application"
+requires-python = ">=3.9"
+dependencies = [
+    "serpapi==1.0.2",
+    "markdown==3.10.2",
+    "mailtrap==2.6.0",
+    "requests==2.32.5",
+    "pydantic[email]",
+    "schedule==1.2.2",
+    "pypdf==6.14.2",
+    "groq==1.5.0",
+    "pydantic-settings==2.14.2"
+]
+
+# Optional: You can define a dev group for tools you only need while coding
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff"
+]

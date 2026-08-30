@@ -1,15 +1,15 @@
 import os
 import json
-from services.resume_parser import ResumeParserEngine
+from app.services.job_search.resume_parser import ResumeParserEngine
 #from config.config import ConfigManager
-from config.settings import AppSettings
+from app.config.job_settings import JobSearchSettings
 from typing import List, Optional
-from models.job import JobPosting
-from models.resume import ResumeMetadata
+from app.models.job import JobPosting
+from app.models.resume import ResumeMetadata
 
 
 class JobFilterService:
-    def __init__(self, settings: AppSettings):
+    def __init__(self, settings: JobSearchSettings):
         #self.config_manager = ConfigManager()
         self.settings = settings
         self.resume_parser = ResumeParserEngine()

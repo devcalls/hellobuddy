@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 from pydantic import BaseModel
-from models.job import JobPosting, JobSearch
+from app.models.job import JobPosting, JobSearch
 
 class BaseJobProvider(ABC):
     @property

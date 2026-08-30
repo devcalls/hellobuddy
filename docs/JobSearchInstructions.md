@@ -7,7 +7,7 @@ Step by step guide to setup HelloBuddy CLI tool.
 
 # 🔑 Credentials Setup Guide
 
-Follow these steps to create your free accounts, get your API tokens, and configure your `config.ini` file.
+Follow these steps to create your free accounts, get your API tokens, and configure your `job_config.ini` file.
 
 ---
 
@@ -21,7 +21,7 @@ Follow these steps to create your free accounts, get your API tokens, and config
 1. Once logged in, you will be taken directly to your **Dashboard**.
 2. Look at the top center of the dashboard for your **Private API Key**. 
 3. Click the **Copy** button. 
-4. Keep this in a safe place, this value is later required in config.ini.
+4. Keep this in a safe place, this value is later required in job_config.ini.
 
 ### Step 3: Adzuna - Create an Account
 1. Go to the [Adzuna Developer Signup Page](https://developer.adzuna.com/).
@@ -29,7 +29,7 @@ Follow these steps to create your free accounts, get your API tokens, and config
 
 ### Step 4: Adzuna - Get Your API Key
 1. Once logged in, generate API Key and a app Id.
-4. Keep this in a safe place, this value is later required in config.ini.
+4. Keep this in a safe place, this value is later required in job_config.ini.
 
 ### Step 5: Reed - Create an Account
 1. Go to the [Reed Developer Signup Page](https://www.reed.co.uk/developers/Jobseeker).
@@ -37,7 +37,7 @@ Follow these steps to create your free accounts, get your API tokens, and config
 
 ### Step 6: Reed - Get Your API Key
 1. Once logged in, generate API Key.
-4. Keep this in a safe place, this value is later required in config.ini.
+4. Keep this in a safe place, this value is later required in job_config.ini.
 
 
 # 📧 Mailtrap Account Setup
@@ -64,7 +64,7 @@ Mailtrap defaults new accounts into an **Email Sandbox environment**—this allo
 4. Select the **API Tokens** menu option.
 5. Click on **Add Token**. Provide a name and click on **Save**
 6. Copy the API Token generated.
-7. Keep this in a safe place, this value is later required in config.ini.
+7. Keep this in a safe place, this value is later required in job_config.ini.
 
 ---
 
@@ -104,15 +104,15 @@ It is highly recommended to use an isolated virtual environment to avoid version
 Once your virtual environment is active (you should see `(venv)` at the beginning of your terminal line), install the required packages from the project root:
 
 ```bash
-pip install -r requirements.txt
+pip install .
 
 ```
 
 ---
 
-# ⚙️ Configuration (`config.ini`)
+# ⚙️ Configuration (`job_config.ini`)
 
-Before running the application, you need to configure your settings. Update the file named `config.ini` in your **project root folder** and fill in your specific details:
+Before running the application, you need to configure your settings. Update the file named `job_config.ini` in your **project root folder** and fill in your specific details:
 
 ```ini
 [STORAGE]
@@ -156,16 +156,17 @@ SEARCH_COUNTRY = <YOUR_JOB_SEARCH_COUNTRY CODE>  # e.g., "us" for United States,
 
 # 🏃 Running the Application
 
-With your virtual environment active and your `config.ini` completely filled out, kickstart the background worker by running the following command from the project root folder:
+With your virtual environment active and your `job_config.ini` completely filled out, kickstart the background worker by running the following command from the project root folder:
 
 ```bash
-python app/main.py
+cd src
+python3 -m app.main
 
 ```
 
 > **💡 Run in Background:** If you are running this on a remote server or want to close your terminal without killing the app, you can use background utilities like `nohup` or `tmux` on Linux/macOS:
 > ```bash
-> python app/main.py
+> python3 -m app.main
 > 
 > ```
 > 
