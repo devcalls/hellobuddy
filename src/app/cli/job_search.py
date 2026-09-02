@@ -7,7 +7,6 @@ from app.services.job_search.job_orchestrator_service import (
 )
 from app.config.job_settings import JobSearchSettings
 
-
 running = True
 
 
@@ -19,10 +18,7 @@ def handle_shutdown(signum, frame):
     global running
 
     print()
-    print(
-        "Shutdown signal received. "
-        "Cleaning up background scheduler..."
-    )
+    print("Shutdown signal received. " "Cleaning up background scheduler...")
 
     running = False
 
@@ -43,9 +39,7 @@ def run_job_search() -> int:
 
         settings = JobSearchSettings()
 
-        scheduled_time = (
-            settings.scheduler.schedule_time
-        )
+        scheduled_time = settings.scheduler.schedule_time
 
         setup_scheduler(
             scheduled_time,
@@ -54,13 +48,9 @@ def run_job_search() -> int:
         )
 
         print()
-        print(
-            "Background scheduler is now running."
-        )
+        print("Background scheduler is now running.")
 
-        print(
-            "Press Ctrl+C to exit."
-        )
+        print("Press Ctrl+C to exit.")
 
         # Keep the process alive.
         signal.pause()
@@ -70,10 +60,7 @@ def run_job_search() -> int:
     except KeyboardInterrupt:
 
         print()
-        print(
-            "👋 Shutdown signal received. "
-            "Exiting hellobuddy..."
-        )
+        print("👋 Shutdown signal received. " "Exiting hellobuddy...")
 
         return 0
 
@@ -81,10 +68,7 @@ def run_job_search() -> int:
 
         print()
         print("=" * 60)
-        print(
-            "🚨 AN UNEXPECTED APPLICATION "
-            "ERROR OCCURRED"
-        )
+        print("🚨 AN UNEXPECTED APPLICATION " "ERROR OCCURRED")
         print("=" * 60)
 
         print(f"Details: {error}")

@@ -1,4 +1,3 @@
-
 from typing import Optional
 from datetime import date
 
@@ -39,28 +38,15 @@ class ResumeASTBuilder:
 
         return ResumeAST(
             source_text=source_text,
-
             metadata=self._build_metadata(
                 source_file=source_file,
                 source_format=source_format,
             ),
-
             summary=extraction.summary,
-
             experience=[
-                self._build_experience(
-                    item
-                )
-                for item in extraction.experiences
+                self._build_experience(item) for item in extraction.experiences
             ],
-
-            education=[
-                self._build_education(
-                    item
-                )
-                for item in extraction.education
-            ],
-
+            education=[self._build_education(item) for item in extraction.education],
             skills=[
                 Skill(
                     name=item.name,
@@ -68,7 +54,6 @@ class ResumeASTBuilder:
                 )
                 for item in extraction.skills
             ],
-
             certifications=[
                 Certification(
                     name=item.name,
@@ -79,15 +64,8 @@ class ResumeASTBuilder:
                 )
                 for item in extraction.certifications
             ],
-
-            projects=[
-                self._build_project(
-                    item
-                )
-                for item in extraction.projects
-            ],
+            projects=[self._build_project(item) for item in extraction.projects],
         )
-        
 
     @staticmethod
     def _build_date_range(
@@ -119,16 +97,10 @@ class ResumeASTBuilder:
             title=item.job_title,
             location=item.location,
             date_range=date_range,
-
             achievements=[
-                Achievement(
-                    text=achievement.text
-                )
-                for achievement in item.achievements
+                Achievement(text=achievement.text) for achievement in item.achievements
             ],
         )
-
-   
 
     @staticmethod
     def _parse_date(
@@ -168,10 +140,7 @@ class ResumeASTBuilder:
         # DateRange.source_text.
         # -----------------------------------------
 
-        if (
-            len(value) == 4
-            and value.isdigit()
-        ):
+        if len(value) == 4 and value.isdigit():
             try:
                 return date(
                     int(value),
@@ -214,7 +183,7 @@ class ResumeASTBuilder:
 
         if item.start_date or item.end_date:
 
-             date_range = ResumeASTBuilder._build_date_range(
+            date_range = ResumeASTBuilder._build_date_range(
                 start_date=item.start_date,
                 end_date=item.end_date,
             )
@@ -224,13 +193,8 @@ class ResumeASTBuilder:
             title=item.job_title,
             location=item.location,
             date_range=date_range,
-
             achievements=[
-                Achievement(
-                    text=achievement.text
-                )
-                for achievement
-                in item.achievements
+                Achievement(text=achievement.text) for achievement in item.achievements
             ],
         )
 
@@ -243,7 +207,7 @@ class ResumeASTBuilder:
 
         if item.start_date or item.end_date:
 
-             date_range = ResumeASTBuilder._build_date_range(
+            date_range = ResumeASTBuilder._build_date_range(
                 start_date=item.start_date,
                 end_date=item.end_date,
             )
@@ -264,16 +228,11 @@ class ResumeASTBuilder:
             name=item.name,
             description=item.description,
             technologies=item.technologies,
-
             achievements=[
-                Achievement(
-                    text=achievement.text
-                )
-                for achievement
-                in item.achievements
+                Achievement(text=achievement.text) for achievement in item.achievements
             ],
         )
-        
+
     @staticmethod
     def _build_date_range(
         start_date: Optional[str],
@@ -283,17 +242,9 @@ class ResumeASTBuilder:
         if not start_date and not end_date:
             return None
 
-        normalized_start = (
-            ResumeASTBuilder._parse_date(
-                start_date
-            )
-        )
+        normalized_start = ResumeASTBuilder._parse_date(start_date)
 
-        normalized_end = (
-            ResumeASTBuilder._parse_date(
-                end_date
-            )
-        )
+        normalized_end = ResumeASTBuilder._parse_date(end_date)
 
         # -----------------------------------------
         # Determine whether the role is current.
@@ -303,15 +254,12 @@ class ResumeASTBuilder:
 
         if end_date:
 
-            current = (
-                end_date.strip().lower()
-                in {
-                    "present",
-                    "current",
-                    "ongoing",
-                    "now",
-                }
-            )
+            current = end_date.strip().lower() in {
+                "present",
+                "current",
+                "ongoing",
+                "now",
+            }
 
         # -----------------------------------------
         # Preserve exactly what the LLM extracted.
@@ -320,18 +268,12 @@ class ResumeASTBuilder:
         source_parts = []
 
         if start_date:
-            source_parts.append(
-                start_date
-            )
+            source_parts.append(start_date)
 
         if end_date:
-            source_parts.append(
-                end_date
-            )
+            source_parts.append(end_date)
 
-        source_text = " - ".join(
-            source_parts
-        ) if source_parts else None
+        source_text = " - ".join(source_parts) if source_parts else None
 
         # -----------------------------------------
         # Build canonical DateRange
@@ -343,4 +285,3 @@ class ResumeASTBuilder:
             current=current,
             source_text=source_text,
         )
-

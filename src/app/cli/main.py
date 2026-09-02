@@ -1,55 +1,20 @@
+from app.cli.util import display_welcome_screen
 import argparse
-import os
 import sys
 
 from app.cli.job_search import run_job_search
-from app.cli.resume import parse_resume
+from app.cli.resume import (
+    optimize_resume,
+    parse_resume,
+)
 
 VERSION = "1.0.1"
 
-def display_welcome_screen():
-    """
-    Display HelloBuddy welcome banner.
-    """
-
-    os.system(
-        "cls" if os.name == "nt" else "clear"
-    )
-
-    banner = r"""
-  _    _ ______ _      _      ____  
- | |  | |  ____| |    | |    / __ \ 
- | |__| | |__  | |    | |   | |  | |
- |  __  |  __| | |    | |   | |  | |
- | |  | | |____| |____| |___| |__| |
- |_|  |_|______|______|______\____/ 
-                                    
-  ____  _    _ _____  _____ __     __
- |  _ \| |  | |  __ \|  __ \\ \   / /
- | |_) | |  | | |  | | |  | |\ \_/ / 
- |  _ <| |  | | |  | | |  | | \   /  
- | |_) | |__| | |__| | |__| |  | |   
- |____/ \____/|_____/|_____/   |_|   
-    """
-
-    print("-" * 60)
-
-    print("-" * 50) # Visual separator line
-    MAROON = "\033[31m"
-    CYAN = "\033[36m"
-    RESET = "\033[0m"
-    print(CYAN + banner)
-    print(f"Welcome to HelloBuddy [Version {VERSION}]" + RESET + "\n")
-
 
 def build_parser():
-
     parser = argparse.ArgumentParser(
         prog="hellobuddy",
-        description=(
-            "HelloBuddy - Personal productivity "
-            "and career assistant"
-        ),
+        description=("HelloBuddy - Personal productivity " "and career assistant"),
     )
 
     parser.add_argument(
@@ -58,9 +23,7 @@ def build_parser():
         version=f"%(prog)s {VERSION}",
     )
 
-    subparsers = parser.add_subparsers(
-        dest="command"
-    )
+    subparsers = parser.add_subparsers(dest="command")
 
     # ==================================================
     # JOB SEARCH
@@ -80,79 +43,137 @@ def build_parser():
         help="Resume and ATS operations",
     )
 
-    resume_subparsers = (
-        resume_parser.add_subparsers(
-            dest="resume_command"
-        )
-    )
+    resume_subparsers = resume_parser.add_subparsers(dest="resume_command")
 
+    # --------------------------------------------------
     # resume parse
+    # --------------------------------------------------
 
-    parse_parser = (
-        resume_subparsers.add_parser(
-            "parse",
-            help=(
-                "Parse a PDF/DOCX/TXT resume "
-                "into ResumeAST"
-            ),
-        )
+    parse_parser = resume_subparsers.add_parser(
+        "parse",
+        help="Parse a resume into ResumeAST",
     )
 
     parse_parser.add_argument(
         "file_path",
-        help=(
-            "Path to PDF, DOCX or TXT resume"
-        ),
+        help="Path to PDF, DOCX or TXT resume",
     )
 
     parse_parser.add_argument(
         "--output",
         "-o",
         default=None,
-        help=(
-            "Write ResumeAST to JSON file"
-        ),
+        help="Write ResumeAST to JSON file",
+    )
+
+    # --------------------------------------------------
+    # resume optimize
+    # --------------------------------------------------
+
+    optimize_parser = resume_subparsers.add_parser(
+        "optimize",
+        help="Analyze and optimize a resume for ATS",
+    )
+
+    optimize_parser.add_argument(
+        "file_path",
+        help="Path to PDF, DOCX, TXT resume or ResumeAST JSON",
+    )
+
+    optimize_parser.add_argument(
+        "--input-type",
+        choices=["resume", "ast"],
+        default="resume",
+        help=("Input type: resume document or ResumeAST JSON. " "Defaults to resume."),
+    )
+
+    optimize_parser.add_argument(
+        "--output",
+        "-o",
+        default=None,
+        help="Write optimization result to JSON file",
+    )
+
+    optimize_parser.add_argument(
+        "--mode",
+        choices=[
+            "general_ats",
+            "targeted_jd",
+        ],
+        default="general_ats",
+        help=("Optimization mode. " "Defaults to general_ats."),
+    )
+
+    optimize_parser.add_argument(
+        "--section",
+        action="append",
+        choices=[
+            "summary",
+            "experience",
+            "skills",
+            "projects",
+            "education",
+            "certifications",
+        ],
+        default=None,
+        help=("Section to optimize. Can be specified " "multiple times."),
     )
 
     return parser, resume_parser
 
 
 def main():
-
-    parser, resume_parser = (
-        build_parser()
-    )
+    parser, resume_parser = build_parser()
 
     args = parser.parse_args()
 
+    # ==================================================
     # No command
+    # ==================================================
+
     if args.command is None:
-
-        display_welcome_screen()
-
+        display_welcome_screen(VERSION)
         parser.print_help()
-
         return 0
 
+    # ==================================================
     # Job search
-    if args.command == "job-search":
+    # ==================================================
 
+    if args.command == "job-search":
         return run_job_search()
 
+    # ==================================================
     # Resume
+    # ==================================================
+
     if args.command == "resume":
 
         if args.resume_command is None:
-
             resume_parser.print_help()
-
             return 0
 
-        if args.resume_command == "parse":
+        # --------------------------------------------------
+        # resume parse
+        # --------------------------------------------------
 
+        if args.resume_command == "parse":
             return parse_resume(
                 file_path=args.file_path,
                 output=args.output,
+            )
+
+        # --------------------------------------------------
+        # resume optimize
+        # --------------------------------------------------
+
+        if args.resume_command == "optimize":
+            return optimize_resume(
+                file_path=args.file_path,
+                output=args.output,
+                mode=args.mode,
+                sections=args.section,
+                input_type=args.input_type,
             )
 
     parser.print_help()

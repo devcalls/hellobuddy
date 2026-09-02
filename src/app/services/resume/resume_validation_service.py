@@ -10,13 +10,9 @@ class ResumeValidationService:
         resume: ResumeAST,
     ) -> ResumeAST:
 
-        self._validate_experience(
-            resume
-        )
+        self._validate_experience(resume)
 
-        self._validate_source_text(
-            resume
-        )
+        self._validate_source_text(resume)
 
         return resume
 
@@ -29,17 +25,11 @@ class ResumeValidationService:
 
             if not experience.company.strip():
 
-                raise ValueError(
-                    "Experience contains "
-                    "an empty company name."
-                )
+                raise ValueError("Experience contains " "an empty company name.")
 
             if not experience.title.strip():
 
-                raise ValueError(
-                    "Experience contains "
-                    "an empty title."
-                )
+                raise ValueError("Experience contains " "an empty title.")
 
     def _validate_source_text(
         self,
@@ -51,17 +41,11 @@ class ResumeValidationService:
             if not experience.source_text:
 
                 raise ValueError(
-                    f"Experience '{experience.company}' "
-                    "has no source_text."
+                    f"Experience '{experience.company}' " "has no source_text."
                 )
 
-            for achievement in (
-                experience.achievements
-            ):
+            for achievement in experience.achievements:
 
                 if not achievement.source_text:
 
-                    raise ValueError(
-                        "Achievement is missing "
-                        "source_text."
-                    )
+                    raise ValueError("Achievement is missing " "source_text.")

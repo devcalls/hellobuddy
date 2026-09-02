@@ -17,7 +17,6 @@ from .job_description import (
     JobRequirement,
 )
 
-
 __all__ = [
     "Achievement",
     "Certification",

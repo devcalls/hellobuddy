@@ -1,4 +1,3 @@
-
 """
 LLM-based resume extraction service.
 
@@ -24,8 +23,11 @@ from app.models.resume.resume_extraction import ResumeExtraction
 from app.prompts.resume.extraction_prompt import (
     RESUME_EXTRACTION_SYSTEM_PROMPT,
 )
-from app.config.llm import ( LLMProvider)
-from app.integration.ai.llm import ( LLMService, LLMServiceFactory, )
+from app.config.llm import LLMProvider
+from app.integration.ai.llm import (
+    LLMService,
+    LLMServiceFactory,
+)
 
 
 class LLMResumeExtractor:
@@ -47,12 +49,7 @@ class LLMResumeExtractor:
 
         else:
 
-            self.llm_service = (
-                LLMServiceFactory.create(
-                    settings=settings.llm
-                )
-            )
-       
+            self.llm_service = LLMServiceFactory.create(settings=settings.llm)
 
     def extract(
         self,
@@ -81,19 +78,11 @@ class LLMResumeExtractor:
                 "the supplied resume text is empty."
             )
 
-        user_prompt = (
-            self._build_user_prompt(
-                resume_text
-            )
-        )
+        user_prompt = self._build_user_prompt(resume_text)
 
         return self.llm_service.generate_structured(
-            system_prompt=(
-                RESUME_EXTRACTION_SYSTEM_PROMPT
-            ),
-
+            system_prompt=(RESUME_EXTRACTION_SYSTEM_PROMPT),
             user_prompt=user_prompt,
-
             response_model=ResumeExtraction,
         )
 

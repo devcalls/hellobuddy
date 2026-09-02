@@ -7,7 +7,6 @@ from pydantic.functional_validators import BeforeValidator
 from app.config.settings import BaseFeatureSettings
 from app.config.llm import LLMSettings
 
-
 BlankToNone = Annotated[
     Optional[str],
     BeforeValidator(lambda v: None if v == "" else v),
@@ -18,16 +17,12 @@ class StorageSettings(BaseModel):
 
     app_data_path: str
 
-    resume_file_path: BlankToNone = Field(
-        default=None
-    )
+    resume_file_path: BlankToNone = Field(default=None)
 
 
 class ApiKeysSettings(BaseModel):
 
-    openai_api_key: BlankToNone = Field(
-        default=None
-    )
+    openai_api_key: BlankToNone = Field(default=None)
 
 
 class ParserSettings(BaseModel):
@@ -37,9 +32,7 @@ class ParserSettings(BaseModel):
 
 class ResumeSettings(BaseFeatureSettings):
 
-    INI_FILE_PATH: ClassVar[str] = (
-        "resume_config.ini"
-    )
+    INI_FILE_PATH: ClassVar[str] = "resume_config.ini"
 
     storage: StorageSettings
 

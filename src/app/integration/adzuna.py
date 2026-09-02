@@ -6,95 +6,110 @@ import urllib.parse
 
 ADZUNA_URL_TEMPLATE = "https://api.adzuna.com/v1/api/jobs/{COUNTRY_CODE}/search/1"
 
+
 class AdzunaProvider(BaseJobProvider):
     def __init__(self, app_id: str, app_key: str):
         self.app_id = app_id
         self.app_key = app_key
-        
 
     @property
     def name(self) -> str:
         return "Adzuna"
-    
+
     def map_country_for_adzuna(self, v: str) -> str:
         """Translates human-readable countries to Adzuna API country codes."""
         v_lower = v.lower().strip()
-        
+
         # Map common inputs to Adzuna's specific ISO-like codes
         country_map = {
             # United Kingdom
-            'uk': 'gb', 'united kingdom': 'gb', 'great britain': 'gb', 'england': 'gb',
+            "uk": "gb",
+            "united kingdom": "gb",
+            "great britain": "gb",
+            "england": "gb",
             # United States
-            'us': 'us', 'usa': 'us', 'united states': 'us', 'america': 'us',
+            "us": "us",
+            "usa": "us",
+            "united states": "us",
+            "america": "us",
             # North & South America
-            'canada': 'ca', 
-            'brazil': 'br',
+            "canada": "ca",
+            "brazil": "br",
             # Europe
-            'germany': 'de', 
-            'france': 'fr', 
-            'italy': 'it', 
-            'netherlands': 'nl', 'the netherlands': 'nl',
-            'austria': 'at', 
-            'poland': 'pl', 
-            'russia': 'ru',
+            "germany": "de",
+            "france": "fr",
+            "italy": "it",
+            "netherlands": "nl",
+            "the netherlands": "nl",
+            "austria": "at",
+            "poland": "pl",
+            "russia": "ru",
             # Asia / Pacific
-            'india': 'in', 
-            'singapore': 'sg', 
-            'australia': 'au', 
-            'new zealand': 'nz',
+            "india": "in",
+            "singapore": "sg",
+            "australia": "au",
+            "new zealand": "nz",
             # Africa
-            'south africa': 'za'
+            "south africa": "za",
         }
-        
+
         # Return the mapped value. If it's already "gb" or not in the dictionary, return it as-is.
         return country_map.get(v_lower, v_lower)
-    
+
     async def search(self, job_search: JobSearch) -> List[JobPosting]:
         query = self.get_query_by_provider(job_search.query_params, self.name)
-        
+
         query_strings = self.parse_query(query)
-        print(f"search term in adzuna {query_strings}") 
+        print(f"search term in adzuna {query_strings}")
         jobs = []
         for search_term in query_strings:
-            print(f"[Engine] Executing search for batch segment for provider: {self.name} : '{search_term}'...")
+            print(
+                f"[Engine] Executing search for batch segment for provider: {self.name} : '{search_term}'..."
+            )
             job_results = await self.search_internal(job_search, search_term)
             jobs.extend(job_results)
         return jobs
 
-    async def search_internal(self, job_search: JobSearch, query_string: str) -> List[JobPosting]:
+    async def search_internal(
+        self, job_search: JobSearch, query_string: str
+    ) -> List[JobPosting]:
         params = {
             "app_id": self.app_id,
             "app_key": self.app_key,
             "what": urllib.parse.quote(query_string),
             "where": job_search.location,
             "content-type": "application/json",
-            "results_per_page": 50
+            "results_per_page": 50,
         }
-        
+
         country = job_search.country
         country_norm = self.map_country_for_adzuna(country)
         base_url = ADZUNA_URL_TEMPLATE.format(COUNTRY_CODE=country)
-        print('base_url' + base_url)
-        
+        print("base_url" + base_url)
+
         async with httpx.AsyncClient() as client:
             response = await client.get(base_url, params=params)
             if response.status_code != 200:
                 return []
-                
+
             data = response.json()
             results = []
-            print('Adzuna API Integration')  # Debugging line to inspect the API response
+            print(
+                "Adzuna API Integration"
+            )  # Debugging line to inspect the API response
             for job in data.get("results", []):
-                results.append(JobPosting(
-                    job_id=str(job.get("jobId", "")),
-                    title=job.get("jobTitle", ""),
-                    company=job.get("employerName", "Unknown"),
-                    expiration_date=job.get("expirationDate", ""),
-                    location=job.get("location", {}).get("display_name", "UK"),
-                    via="Adzuna",
-                    #salary=f"£{job.get('salary_min', '')} - £{job.get('salary_max', '')}" if job.get('salary_min') else "Not specified",
-                    apply_link=job.get("jobUrl", ""),
-                    description=job.get("jobDescription", ""),
-                    provider_name=self.name
-                ))
+                results.append(
+                    JobPosting(
+                        job_id=str(job.get("jobId", "")),
+                        title=job.get("jobTitle", ""),
+                        company=job.get("employerName", "Unknown"),
+                        expiration_date=job.get("expirationDate", ""),
+                        location=job.get("location", {}).get("display_name", "UK"),
+                        via="Adzuna",
+                        # salary=f"£{job.get('salary_min', '')} - £{job.get('salary_max', '')}" if job.get('salary_min') else "Not specified",
+                        apply_link=job.get("jobUrl", ""),
+                        description=job.get("jobDescription", ""),
+                        provider_name=self.name,
+                    )
+                )
             return results

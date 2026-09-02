@@ -4,13 +4,9 @@ from pydantic import BaseModel, Field
 class JobRequirement(BaseModel):
     text: str
 
-    skills: list[str] = Field(
-        default_factory=list
-    )
+    skills: list[str] = Field(default_factory=list)
 
-    keywords: list[str] = Field(
-        default_factory=list
-    )
+    keywords: list[str] = Field(default_factory=list)
 
 
 class JobDescriptionAST(BaseModel):
@@ -25,22 +21,12 @@ class JobDescriptionAST(BaseModel):
 
     employment_type: str | None = None
 
-    required_skills: list[str] = Field(
-        default_factory=list
-    )
+    required_skills: list[str] = Field(default_factory=list)
 
-    preferred_skills: list[str] = Field(
-        default_factory=list
-    )
+    preferred_skills: list[str] = Field(default_factory=list)
 
-    responsibilities: list[JobRequirement] = Field(
-        default_factory=list
-    )
+    responsibilities: list[JobRequirement] = Field(default_factory=list)
 
-    qualifications: list[JobRequirement] = Field(
-        default_factory=list
-    )
+    qualifications: list[JobRequirement] = Field(default_factory=list)
 
-    keywords: list[str] = Field(
-        default_factory=list
-    )
+    keywords: list[str] = Field(default_factory=list)

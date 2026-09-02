@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 ## What we discovered about the resume.
 
+
 class KeywordMatch(BaseModel):
     keyword: str
     matched: bool
@@ -31,14 +32,8 @@ class AtsAnalysis(BaseModel):
     formatting_score: float
     structure_score: float
 
-    keyword_matches: list[KeywordMatch] = Field(
-        default_factory=list
-    )
+    keyword_matches: list[KeywordMatch] = Field(default_factory=list)
 
-    skill_gaps: list[SkillGap] = Field(
-        default_factory=list
-    )
+    skill_gaps: list[SkillGap] = Field(default_factory=list)
 
-    formatting_issues: list[FormattingIssue] = Field(
-        default_factory=list
-    )
+    formatting_issues: list[FormattingIssue] = Field(default_factory=list)

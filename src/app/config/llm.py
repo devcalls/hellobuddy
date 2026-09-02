@@ -1,4 +1,3 @@
-
 from enum import Enum
 from typing import Any
 
@@ -22,13 +21,9 @@ class LLMSettings(BaseModel):
     Model identifies the model to invoke.
     """
 
-    provider: LLMProvider = Field(
-        default=LLMProvider.GEMINI
-    )
+    provider: LLMProvider = Field(default=LLMProvider.GEMINI)
 
-    model: str = Field(
-        default="gemini-2.5-flash"
-    )
+    model: str = Field(default="gemini-3.6-flash")
 
     temperature: float = Field(
         default=0.0,
@@ -37,7 +32,6 @@ class LLMSettings(BaseModel):
     )
 
     max_output_tokens: int = Field(
-        default=8192,
         gt=0,
     )
 
@@ -58,26 +52,18 @@ class LLMClientFactory:
 
         if not api_key:
             raise ValueError(
-                f"API key is required for provider "
-                f"'{settings.provider.value}'."
+                f"API key is required for provider " f"'{settings.provider.value}'."
             )
 
         if settings.provider == LLMProvider.GEMINI:
 
-            return LLMClientFactory._create_gemini_client(
-                api_key
-            )
+            return LLMClientFactory._create_gemini_client(api_key)
 
         if settings.provider == LLMProvider.OPENAI:
 
-            return LLMClientFactory._create_openai_client(
-                api_key
-            )
+            return LLMClientFactory._create_openai_client(api_key)
 
-        raise ValueError(
-            f"Unsupported LLM provider: "
-            f"{settings.provider}"
-        )
+        raise ValueError(f"Unsupported LLM provider: " f"{settings.provider}")
 
     @staticmethod
     def _create_gemini_client(
@@ -86,9 +72,7 @@ class LLMClientFactory:
 
         from google import genai
 
-        return genai.Client(
-            api_key=api_key
-        )
+        return genai.Client(api_key=api_key)
 
     @staticmethod
     def _create_openai_client(
@@ -97,7 +81,4 @@ class LLMClientFactory:
 
         from openai import OpenAI
 
-        return OpenAI(
-            api_key=api_key
-        )
-
+        return OpenAI(api_key=api_key)

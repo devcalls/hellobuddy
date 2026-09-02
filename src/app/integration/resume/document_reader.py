@@ -25,9 +25,7 @@ class DocumentReader:
         path = Path(file_path)
 
         if not path.exists():
-            raise FileNotFoundError(
-                f"Resume file not found: {file_path}"
-            )
+            raise FileNotFoundError(f"Resume file not found: {file_path}")
 
         extension = path.suffix.lower()
 
@@ -68,20 +66,14 @@ class DocumentReader:
                 text = page.get_text("text")
 
                 if text:
-                    pages.append(
-                        text.strip()
-                    )
+                    pages.append(text.strip())
 
             document.close()
 
-            return "\n\n".join(
-                pages
-            ).strip()
+            return "\n\n".join(pages).strip()
 
         except Exception as exc:
-            raise DocumentReadError(
-                f"Unable to read PDF: {path}"
-            ) from exc
+            raise DocumentReadError(f"Unable to read PDF: {path}") from exc
 
     def _read_docx(
         self,
@@ -119,9 +111,7 @@ class DocumentReader:
                 for row in table.rows:
 
                     row_text = " | ".join(
-                        cell.text.strip()
-                        for cell in row.cells
-                        if cell.text.strip()
+                        cell.text.strip() for cell in row.cells if cell.text.strip()
                     )
 
                     if row_text:
@@ -130,9 +120,7 @@ class DocumentReader:
             return "\n".join(blocks).strip()
 
         except Exception as exc:
-            raise DocumentReadError(
-                f"Unable to read DOCX: {path}"
-            ) from exc
+            raise DocumentReadError(f"Unable to read DOCX: {path}") from exc
 
     def _read_txt(
         self,
@@ -140,9 +128,7 @@ class DocumentReader:
     ) -> str:
 
         try:
-            return path.read_text(
-                encoding="utf-8"
-            ).strip()
+            return path.read_text(encoding="utf-8").strip()
 
         except UnicodeDecodeError as exc:
             raise DocumentReadError(

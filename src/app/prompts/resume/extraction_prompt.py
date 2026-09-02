@@ -1,4 +1,3 @@
-
 RESUME_EXTRACTION_SYSTEM_PROMPT = """
 You are an expert resume information extraction system.
 

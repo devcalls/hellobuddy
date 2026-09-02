@@ -2,21 +2,24 @@ import os
 import json
 import os
 import markdown
-#from config.config import ConfigManager
+
+# from config.config import ConfigManager
 from app.config.job_settings import JobSearchSettings
 from app.models.job import JobPosting
 from typing import List
 
+
 class JobScrapingService:
     def __init__(self, settings: JobSearchSettings):
-        #self.config_manager = ConfigManager()
+        # self.config_manager = ConfigManager()
         self.settings = settings
-        #self.api_key = self.config_manager.get_value("API_KEYS", "SERPAPI_KEY")
+        # self.api_key = self.config_manager.get_value("API_KEYS", "SERPAPI_KEY")
         self.api_key = self.settings.api_keys.serp_api_key
 
-
     # --- Advanced Version: Handling a LIST of multiple jobs ---
-    def save_job_list_to_markdown(self, jobs_list: list, filepath: str = "all_job_matches.md"):
+    def save_job_list_to_markdown(
+        self, jobs_list: list, filepath: str = "all_job_matches.md"
+    ):
         """
         Takes a list of job dictionaries and creates a comprehensive report
         complete with a summary overview table at the top.
@@ -38,11 +41,11 @@ class JobScrapingService:
             via = job.via if job.via else "NA"
             apply = job.apply_link if job.apply_link else "#"
             provider = job.provider_name
-            
+
             md_content += f"| [{title}]({apply}) | **{company}** | {location} | *{via}* | {provider} |\n"
-            
+
         md_content += "\n\n---\n\n"
-        
+
         # Append the detailed descriptions below the table
         for idx, job in enumerate(jobs, 1):
             link = job.apply_link if job.apply_link else "#"
@@ -56,13 +59,12 @@ class JobScrapingService:
         print(f"Full report with {len(jobs_list)} jobs compiled at {filepath}")
         return md_content
 
-
     def convert_md_file_to_html_body(self, md_content: str) -> str:
         """Converts markdown content to converted HTML into a responsive styling wrapper."""
-            
+
         # Convert native markdown syntax to HTML string layout
-        html_content = markdown.markdown(md_content, extensions=['tables'])
-        
+        html_content = markdown.markdown(md_content, extensions=["tables"])
+
         # Wrap the raw HTML inside a clean, modern responsive email wrapper
         # styled_email_html = f"""
         # <!DOCTYPE html>
@@ -89,7 +91,7 @@ class JobScrapingService:
         # </body>
         # </html>
         # """
-        
+
         styled_email_html = f"""
                 <!DOCTYPE html>
                 <html lang="en">
@@ -160,4 +162,3 @@ class JobScrapingService:
                 </html>
                 """
         return styled_email_html
-

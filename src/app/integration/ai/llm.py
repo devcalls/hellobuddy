@@ -79,18 +79,14 @@ class GeminiLLMService(LLMService):
         # 2. Resolve all $defs / $ref references
         # ---------------------------------------------
 
-        schema = self._dereference_schema(
-            schema
-        )
+        schema = self._dereference_schema(schema)
 
         # ---------------------------------------------
         # 3. Remove JSON-schema constructs that are
         #    not needed by Gemini's response_schema.
         # ---------------------------------------------
 
-        schema = self._clean_schema(
-            schema
-        )
+        schema = self._clean_schema(schema)
 
         # ---------------------------------------------
         # 4. Call Gemini
@@ -98,35 +94,16 @@ class GeminiLLMService(LLMService):
 
         response = self.client.models.generate_content(
             model=self.settings.model,
-
             contents=[
                 {
                     "role": "user",
-                    "parts": [
-                        {
-                            "text": (
-                                f"{system_prompt}\n\n"
-                                f"{user_prompt}"
-                            )
-                        }
-                    ],
+                    "parts": [{"text": (f"{system_prompt}\n\n" f"{user_prompt}")}],
                 }
             ],
-
             config=types.GenerateContentConfig(
-
-                temperature=(
-                    self.settings.temperature
-                ),
-
-                max_output_tokens=(
-                    self.settings.max_output_tokens
-                ),
-
-                response_mime_type=(
-                    "application/json"
-                ),
-
+                temperature=(self.settings.temperature),
+                max_output_tokens=(self.settings.max_output_tokens),
+                response_mime_type=("application/json"),
                 response_schema=schema,
             ),
         )
@@ -138,13 +115,9 @@ class GeminiLLMService(LLMService):
 
         if not response.text:
 
-            raise ValueError(
-                "Gemini returned an empty response."
-            )
+            raise ValueError("Gemini returned an empty response.")
 
-        return response_model.model_validate_json(
-            response.text
-        )
+        return response_model.model_validate_json(response.text)
 
     @classmethod
     def _dereference_schema(
@@ -171,10 +144,7 @@ class GeminiLLMService(LLMService):
         Pydantic's nested references.
         """
 
-        defs = schema.get(
-            "$defs",
-            {}
-        )
+        defs = schema.get("$defs", {})
 
         def resolve(
             node: Any,
@@ -190,9 +160,7 @@ class GeminiLLMService(LLMService):
 
                 if ref:
 
-                    ref_name = (
-                        ref.split("/")[-1]
-                    )
+                    ref_name = ref.split("/")[-1]
 
                     if ref_name not in defs:
 
@@ -204,18 +172,11 @@ class GeminiLLMService(LLMService):
                         )
 
                     # Resolve the referenced model
-                    resolved = resolve(
-                        defs[ref_name]
-                    )
+                    resolved = resolve(defs[ref_name])
 
                     # Preserve description if the
                     # reference had one.
-                    extra = {
-                        key: value
-                        for key, value
-                        in node.items()
-                        if key != "$ref"
-                    }
+                    extra = {key: value for key, value in node.items() if key != "$ref"}
 
                     if extra:
 
@@ -232,9 +193,7 @@ class GeminiLLMService(LLMService):
                     return resolved
 
                 return {
-                    key: resolve(value)
-                    for key, value in node.items()
-                    if key != "$defs"
+                    key: resolve(value) for key, value in node.items() if key != "$defs"
                 }
 
             # -----------------------------------------
@@ -243,10 +202,7 @@ class GeminiLLMService(LLMService):
 
             if isinstance(node, list):
 
-                return [
-                    resolve(item)
-                    for item in node
-                ]
+                return [resolve(item) for item in node]
 
             return node
 
@@ -267,10 +223,7 @@ class GeminiLLMService(LLMService):
 
         if isinstance(schema, list):
 
-            return [
-                cls._clean_schema(item)
-                for item in schema
-            ]
+            return [cls._clean_schema(item) for item in schema]
 
         if not isinstance(schema, dict):
 
@@ -294,9 +247,7 @@ class GeminiLLMService(LLMService):
 
                 continue
 
-            cleaned[key] = (
-                cls._clean_schema(value)
-            )
+            cleaned[key] = cls._clean_schema(value)
 
         return cleaned
 
@@ -324,7 +275,6 @@ class OpenAILLMService(LLMService):
 
         response = self.client.responses.parse(
             model=self.settings.model,
-
             input=[
                 {
                     "role": "system",
@@ -335,7 +285,6 @@ class OpenAILLMService(LLMService):
                     "content": user_prompt,
                 },
             ],
-
             text_format=response_model,
         )
 
@@ -343,9 +292,7 @@ class OpenAILLMService(LLMService):
 
         if result is None:
 
-            raise ValueError(
-                "OpenAI returned no structured output."
-            )
+            raise ValueError("OpenAI returned no structured output.")
 
         return result
 
@@ -363,18 +310,15 @@ class LLMServiceFactory:
         if settings.provider == LLMProvider.GEMINI:
 
             from google import genai
-            
+
             if "GOOGLE_API_KEY" not in os.environ:
                 raise ValueError(
-                                f"API key is required for "
-                                f"{settings.provider.value}."
-                            )
+                    f"API key is required for " f"{settings.provider.value}."
+                )
             else:
                 api_key = os.environ["GOOGLE_API_KEY"]
 
-            client = genai.Client(
-                api_key=api_key
-            )
+            client = genai.Client(api_key=api_key)
 
             return GeminiLLMService(
                 client=client,
@@ -384,25 +328,19 @@ class LLMServiceFactory:
         if settings.provider == LLMProvider.OPENAI:
 
             from openai import OpenAI
-            
+
             if "OPENAI_API_KEY" not in os.environ:
                 raise ValueError(
-                                f"API key is required for "
-                                f"{settings.provider.value}."
-                            )
+                    f"API key is required for " f"{settings.provider.value}."
+                )
             else:
                 api_key = os.environ["GEMINI_API_KEY"]
 
-            client = OpenAI(
-                api_key=api_key
-            )
+            client = OpenAI(api_key=api_key)
 
             return OpenAILLMService(
                 client=client,
                 settings=settings,
             )
 
-        raise ValueError(
-            f"Unsupported LLM provider: "
-            f"{settings.provider}"
-        )
+        raise ValueError(f"Unsupported LLM provider: " f"{settings.provider}")

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from enum import Enum
@@ -32,31 +31,16 @@ class ResumeConfidenceService:
         resume: ResumeAST,
     ) -> ConfidenceScore:
 
-        evidence_score = self._calculate_evidence_score(
-            resume
-        )
+        evidence_score = self._calculate_evidence_score(resume)
 
-        completeness_score = (
-            self._calculate_completeness_score(
-                resume
-            )
-        )
+        completeness_score = self._calculate_completeness_score(resume)
 
-        normalization_score = (
-            self._calculate_normalization_score(
-                resume
-            )
-        )
+        normalization_score = self._calculate_normalization_score(resume)
 
         score = (
-            evidence_score
-            * self.EVIDENCE_WEIGHT
-            +
-            completeness_score
-            * self.COMPLETENESS_WEIGHT
-            +
-            normalization_score
-            * self.NORMALIZATION_WEIGHT
+            evidence_score * self.EVIDENCE_WEIGHT
+            + completeness_score * self.COMPLETENESS_WEIGHT
+            + normalization_score * self.NORMALIZATION_WEIGHT
         )
 
         score = round(
@@ -90,9 +74,7 @@ class ResumeConfidenceService:
         resume: ResumeAST,
     ) -> float:
 
-        evidences = list(
-            self._collect_evidence(resume)
-        )
+        evidences = list(self._collect_evidence(resume))
 
         if not evidences:
             return 0.0
@@ -106,10 +88,7 @@ class ResumeConfidenceService:
         if not confidence_values:
             return 0.0
 
-        average = (
-            sum(confidence_values)
-            / len(confidence_values)
-        )
+        average = sum(confidence_values) / len(confidence_values)
 
         # Evidence coverage bonus.
         #
@@ -121,11 +100,7 @@ class ResumeConfidenceService:
             1.0,
         )
 
-        score = (
-            average * 80.0
-            +
-            coverage * 20.0
-        )
+        score = average * 80.0 + coverage * 20.0
 
         return min(
             100.0,
@@ -155,10 +130,7 @@ class ResumeConfidenceService:
         if not checks:
             return 0.0
 
-        return (
-            sum(checks)
-            / len(checks)
-        ) * 100.0
+        return (sum(checks) / len(checks)) * 100.0
 
     # ---------------------------------------------------------
     # Normalization
@@ -181,10 +153,7 @@ class ResumeConfidenceService:
                 if experience.date_range.start_date:
                     checks.append(True)
 
-                if (
-                    experience.date_range.end_date
-                    or experience.date_range.current
-                ):
+                if experience.date_range.end_date or experience.date_range.current:
                     checks.append(True)
 
         for education in resume.education:
@@ -194,10 +163,7 @@ class ResumeConfidenceService:
                 if education.date_range.start_date:
                     checks.append(True)
 
-                if (
-                    education.date_range.end_date
-                    or education.date_range.current
-                ):
+                if education.date_range.end_date or education.date_range.current:
                     checks.append(True)
 
         if not checks:
@@ -208,10 +174,7 @@ class ResumeConfidenceService:
 
             return 100.0
 
-        return (
-            sum(checks)
-            / len(checks)
-        ) * 100.0
+        return (sum(checks) / len(checks)) * 100.0
 
     # ---------------------------------------------------------
     # Evidence collection
@@ -225,15 +188,9 @@ class ResumeConfidenceService:
         for experience in resume.experience:
 
             if experience.date_range:
-                yield from (
-                    experience
-                    .date_range
-                    .evidence
-                )
+                yield from (experience.date_range.evidence)
 
-            for achievement in (
-                experience.achievements
-            ):
+            for achievement in experience.achievements:
                 yield from achievement.evidence
 
         for skill in resume.skills:
@@ -242,15 +199,9 @@ class ResumeConfidenceService:
         for education in resume.education:
 
             if education.date_range:
-                yield from (
-                    education
-                    .date_range
-                    .evidence
-                )
+                yield from (education.date_range.evidence)
 
-        for certification in (
-            resume.certifications
-        ):
+        for certification in resume.certifications:
             yield from certification.evidence
 
         for project in resume.projects:
@@ -278,4 +229,3 @@ class ResumeConfidenceService:
             return ConfidenceLevel.LOW
 
         return ConfidenceLevel.VERY_LOW
-
