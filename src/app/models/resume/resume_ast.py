@@ -16,6 +16,13 @@ from datetime import date
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
+from uuid import uuid4
+
+from pydantic import BaseModel, Field
+
+
+def generate_id(prefix: str) -> str:
+    return f"{prefix}_{uuid4().hex[:12]}"
 
 # ============================================================
 # Extraction / Provenance
@@ -157,6 +164,9 @@ class ContactInformation(BaseModel):
     """
     Candidate contact information.
     """
+    id: str = Field(
+        default_factory=lambda: generate_id("achievement")
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -192,6 +202,9 @@ class Achievement(BaseModel):
     A meaningful accomplishment, responsibility, or
     achievement extracted from an experience or project.
     """
+    id: str = Field(
+        default_factory=lambda: generate_id("achievement")
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -248,6 +261,9 @@ class Experience(BaseModel):
     """
     One professional experience entry.
     """
+    id: str = Field(
+        default_factory=lambda: generate_id("achievement")
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -288,6 +304,9 @@ class Skill(BaseModel):
     """
     Individual skill extracted from the resume.
     """
+    id: str = Field(
+        default_factory=lambda: generate_id("achievement")
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -325,6 +344,9 @@ class Education(BaseModel):
     """
     Academic qualification.
     """
+    id: str = Field(
+        default_factory=lambda: generate_id("achievement")
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -363,6 +385,9 @@ class Certification(BaseModel):
     """
     Professional certification extracted from the resume.
     """
+    id: str = Field(
+        default_factory=lambda: generate_id("achievement")
+    )
 
     name: str = Field(description="Certification name.")
 
@@ -400,6 +425,9 @@ class Project(BaseModel):
     """
     A project listed on the resume.
     """
+    id: str = Field(
+        default_factory=lambda: generate_id("achievement")
+    )
 
     model_config = ConfigDict(extra="forbid")
 

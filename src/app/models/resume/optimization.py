@@ -20,14 +20,6 @@ class ResumeSection(str, Enum):
     CERTIFICATIONS = "certifications"
 
 
-class ChangeType(str, Enum):
-    REWRITE = "rewrite"
-    REORDER = "reorder"
-    GROUP = "group"
-    REMOVE = "remove"
-    NORMALIZE = "normalize"
-
-
 class FindingSeverity(str, Enum):
     INFO = "info"
     WARNING = "warning"
@@ -40,6 +32,12 @@ class FindingCategory(str, Enum):
     CONTENT = "content"
     EVIDENCE = "evidence"
     STRUCTURE = "structure"
+
+
+class ChangeType(str, Enum):
+    REWRITE = "rewrite"
+    NORMALIZE = "normalize"
+    REORDER = "reorder"
 
 
 class OptimizationGuideline(BaseModel):
@@ -62,39 +60,40 @@ class OptimizationFinding(BaseModel):
 
 
 class OptimizationChange(BaseModel):
+    """
+    A proposed mutation to an existing ResumeAST field.
+
+    The LLM does not reconstruct the containing AST object.
+    It only proposes a text replacement.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    change_type: ChangeType
+    record_id: str
+    field: str
+
+    change_type: ChangeType = ChangeType.REWRITE
+
+    original_text: str
+    optimized_text: str
+
     guideline_id: str
-    original_text: str = ""
-    optimized_text: str = ""
     reason: str
 
 
 class SectionOptimizationLLMResult(BaseModel):
     """
-    Strict schema exposed to Gemini.
+    Provider-neutral structured response from an LLM.
 
-    Important:
-    optimized_content_json deliberately remains a string.
-
-    Gemini generates:
-        outer JSON
-            |
-            +-- optimized_content_json
-                    |
-                    +-- JSON representation of actual AST section
-
-    Python subsequently parses and validates that inner JSON against
-    the canonical ResumeAST models.
+    IMPORTANT:
+    This contains proposals only.
+    It does not contain ResumeAST objects.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     section: ResumeSection
     optimized: bool = False
-
-    optimized_content_json: str = ""
 
     findings: list[OptimizationFinding] = Field(
         default_factory=list
@@ -107,20 +106,14 @@ class SectionOptimizationLLMResult(BaseModel):
 
 class SectionOptimizationResult(BaseModel):
     """
-    Application-level result.
-
-    This model is NOT sent to Gemini because it contains heterogeneous
-    Any fields.
+    Application-level result after Python has validated/applied
+    the LLM proposals.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     section: ResumeSection
-
     optimized: bool = False
-
-    original_content: Any
-    optimized_content: Any
 
     findings: list[OptimizationFinding] = Field(
         default_factory=list
@@ -130,7 +123,10 @@ class SectionOptimizationResult(BaseModel):
         default_factory=list
     )
 
+    applied_changes: int = 0
+
     validation_passed: bool = True
+
     validation_errors: list[str] = Field(
         default_factory=list
     )
@@ -156,6 +152,8 @@ class ResumeOptimizationRequest(BaseModel):
         default_factory=list
     )
 
+    job_description: str | None = None
+
 
 class ResumeOptimizationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -163,7 +161,6 @@ class ResumeOptimizationResult(BaseModel):
     mode: OptimizationMode
 
     original_resume: dict[str, Any]
-
     optimized_resume: dict[str, Any]
 
     sections: list[SectionOptimizationResult] = Field(
