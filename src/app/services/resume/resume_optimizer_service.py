@@ -1,17 +1,18 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Type
+from typing import Any
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from app.models.resume.optimization import (
     OptimizationGuideline,
-    OptimizationMode,
     ResumeOptimizationRequest,
     ResumeOptimizationResult,
     ResumeSection,
+    SectionOptimizationLLMResult,
     SectionOptimizationResult,
 )
 from app.models.resume.resume_ast import (
@@ -25,12 +26,31 @@ from app.models.resume.resume_ast import (
 from app.services.resume.resume_parser_service import ResumeParserService
 from app.services.resume.section_optimizer import SectionOptimizer
 
+# ---------------------------------------------------------------------------
+# Section → ResumeAST type mapping
+# ---------------------------------------------------------------------------
+#
+# This is the canonical conversion/validation boundary between LLM output
+# and ResumeAST.
+#
+# The LLM is allowed to return JSON, but Python decides whether that JSON
+# is actually valid ResumeAST content.
+#
+SECTION_TYPE_ADAPTERS: dict[ResumeSection, TypeAdapter] = {
+    ResumeSection.SUMMARY: TypeAdapter(str),
+    ResumeSection.EXPERIENCE: TypeAdapter(list[Experience]),
+    ResumeSection.SKILLS: TypeAdapter(list[Skill]),
+    ResumeSection.PROJECTS: TypeAdapter(list[Project]),
+    ResumeSection.EDUCATION: TypeAdapter(list[Education]),
+    ResumeSection.CERTIFICATIONS: TypeAdapter(list[Certification]),
+}
+
 
 class ResumeOptimizerService:
     """
-    Orchestrates resume analysis and ATS optimization.
+    Orchestrates resume parsing and ATS optimization.
 
-    Main pipeline:
+    Supported flows:
 
         Resume file
             ↓
@@ -40,13 +60,39 @@ class ResumeOptimizerService:
             ↓
         SectionOptimizer
             ↓
-        SectionOptimizationResult
+        SectionOptimizationLLMResult
             ↓
-        Pydantic validation/conversion
+        JSON deserialization
+            ↓
+        Pydantic validation
+            ↓
+        Validated ResumeAST section
             ↓
         Optimized ResumeAST
 
-    The original ResumeAST is never mutated.
+
+    Or:
+
+        Existing ResumeAST JSON
+            ↓
+        ResumeAST.model_validate()
+            ↓
+        SectionOptimizer
+            ↓
+        JSON deserialization
+            ↓
+        Pydantic validation
+            ↓
+        Optimized ResumeAST
+
+    Important design rules:
+
+    1. The original ResumeAST is never mutated.
+    2. The LLM never directly controls the ResumeAST.
+    3. Every optimized section is validated before being applied.
+    4. If an LLM call fails, the original section is retained.
+    5. If LLM output fails Pydantic validation, the original section
+       is retained.
     """
 
     def __init__(
@@ -57,19 +103,19 @@ class ResumeOptimizerService:
         self.parser_service = parser_service
         self.section_optimizer = section_optimizer
 
-    # ================================================================
+    # ======================================================================
     # PUBLIC API
-    # ================================================================
+    # ======================================================================
 
     def optimize_file(
         self,
-        resume_path: Path,
+        resume_path: str | Path,
         request: ResumeOptimizationRequest | None = None,
     ) -> ResumeOptimizationResult:
         """
-        Analyze a resume file and optimize the resulting ResumeAST.
+        Parse a resume document and optimize the resulting ResumeAST.
 
-        This is the primary entry point for:
+        Example:
 
             hellobuddy resume optimize resume.pdf
         """
@@ -88,6 +134,18 @@ class ResumeOptimizerService:
         ast_path: str | Path,
         request: ResumeOptimizationRequest | None = None,
     ) -> ResumeOptimizationResult:
+        """
+        Load an existing ResumeAST JSON file and optimize it.
+
+        This path deliberately does NOT invoke DocumentReader or the
+        resume parser.
+
+        Example:
+
+            hellobuddy resume optimize resume.ast.json --input-type ast
+        """
+
+        request = request or ResumeOptimizationRequest()
 
         resume_ast = self.parser_service.load_ast(ast_path)
 
@@ -104,15 +162,15 @@ class ResumeOptimizerService:
         """
         Optimize an existing ResumeAST.
 
-        Useful when an AST has already been generated and should
-        not be parsed again.
+        The supplied ResumeAST is never mutated.
         """
 
         request = request or ResumeOptimizationRequest()
 
+        # Keep the original representation for comparison/output.
         original_resume = self._serialize_ast(resume_ast)
 
-        # Never mutate the caller's ResumeAST.
+        # Work on a copy only.
         optimized_resume_ast = deepcopy(resume_ast)
 
         guidelines = self._get_guidelines(request)
@@ -122,27 +180,37 @@ class ResumeOptimizerService:
 
         for section in request.sections:
 
+            # --------------------------------------------------------------
+            # Get current section content.
+            # --------------------------------------------------------------
+
             content = self._get_section_content(
                 resume_ast=resume_ast,
                 section=section,
             )
 
-            # Section does not exist / is empty.
+            # Empty / missing section.
             if content is None:
                 continue
+
+            # --------------------------------------------------------------
+            # Determine applicable guidelines.
+            # --------------------------------------------------------------
 
             applicable_guidelines = self._get_applicable_guidelines(
                 section=section,
                 guidelines=guidelines,
             )
 
-            # No applicable guidelines means there is nothing
-            # for this section to optimize.
             if not applicable_guidelines:
                 continue
 
+            # --------------------------------------------------------------
+            # Call LLM.
+            # --------------------------------------------------------------
+
             try:
-                result = self.section_optimizer.optimize(
+                llm_result = self.section_optimizer.optimize(
                     section=section,
                     content=content,
                     guidelines=applicable_guidelines,
@@ -164,47 +232,50 @@ class ResumeOptimizerService:
 
                 continue
 
-            # --------------------------------------------------------
-            # Validate and convert the LLM-generated section.
-            # --------------------------------------------------------
+            # --------------------------------------------------------------
+            # Convert LLM response into application-level result.
+            # --------------------------------------------------------------
 
-            converted_content, conversion_errors = self._validate_and_convert_section(
+            section_result = self._process_llm_result(
                 section=section,
-                optimized_content=result.optimized_content,
+                original_content=content,
+                llm_result=llm_result,
             )
 
-            if conversion_errors:
-                result.validation_passed = False
-                result.validation_errors.extend(conversion_errors)
+            section_results.append(section_result)
 
+            # --------------------------------------------------------------
+            # Do not apply invalid output.
+            # --------------------------------------------------------------
+
+            if not section_result.validation_passed:
                 validation_errors.extend(
                     self._prefix_validation_errors(
                         section=section,
-                        errors=conversion_errors,
+                        errors=section_result.validation_errors,
                     )
                 )
-
-                section_results.append(result)
-
                 continue
 
-            # --------------------------------------------------------
-            # Replace the generic LLM content with the validated
-            # Pydantic content.
-            # --------------------------------------------------------
+            # --------------------------------------------------------------
+            # Do not apply a section that the LLM says was not optimized.
+            # --------------------------------------------------------------
 
-            result.optimized_content = converted_content
+            if not section_result.optimized:
+                continue
 
-            # --------------------------------------------------------
+            # --------------------------------------------------------------
             # Apply only validated content.
-            # --------------------------------------------------------
+            # --------------------------------------------------------------
 
             self._apply_section_result(
                 resume_ast=optimized_resume_ast,
-                result=result,
+                result=section_result,
             )
 
-            section_results.append(result)
+        # ------------------------------------------------------------------
+        # Serialize final optimized AST.
+        # ------------------------------------------------------------------
 
         optimized_resume = self._serialize_ast(optimized_resume_ast)
 
@@ -217,9 +288,135 @@ class ResumeOptimizerService:
             validation_errors=validation_errors,
         )
 
-    # ================================================================
+    # ======================================================================
+    # LLM RESULT PROCESSING
+    # ======================================================================
+
+    def _process_llm_result(
+        self,
+        section: ResumeSection,
+        original_content: Any,
+        llm_result: SectionOptimizationLLMResult,
+    ) -> SectionOptimizationResult:
+        """
+        Convert the Gemini-facing result into the application-level result.
+
+        The important boundary is:
+
+            optimized_content_json
+                    ↓
+                json.loads()
+                    ↓
+            section-specific TypeAdapter
+                    ↓
+            validated ResumeAST content
+
+        The LLM never gets to directly inject arbitrary Python objects
+        into ResumeAST.
+        """
+
+        # --------------------------------------------------------------
+        # Make sure the LLM responded for the expected section.
+        # --------------------------------------------------------------
+
+        if llm_result.section != section:
+            error = (
+                f"LLM returned section "
+                f"'{llm_result.section.value}' while "
+                f"'{section.value}' was requested."
+            )
+
+            return SectionOptimizationResult(
+                section=section,
+                optimized=False,
+                original_content=original_content,
+                optimized_content=original_content,
+                findings=llm_result.findings,
+                changes=llm_result.changes,
+                validation_passed=False,
+                validation_errors=[error],
+            )
+
+        # --------------------------------------------------------------
+        # LLM explicitly says no optimization was made.
+        #
+        # We still parse/validate the returned content if present.
+        # This allows the output to remain structurally safe.
+        # --------------------------------------------------------------
+
+        if not llm_result.optimized:
+            return SectionOptimizationResult(
+                section=section,
+                optimized=False,
+                original_content=original_content,
+                optimized_content=original_content,
+                findings=llm_result.findings,
+                changes=llm_result.changes,
+                validation_passed=True,
+                validation_errors=[],
+            )
+
+        # --------------------------------------------------------------
+        # optimized_content_json is required for an optimized result.
+        # --------------------------------------------------------------
+
+        if not llm_result.optimized_content_json:
+            error = (
+                f"{section.value}: "
+                "LLM returned optimized=true but "
+                "optimized_content_json is empty."
+            )
+
+            return SectionOptimizationResult(
+                section=section,
+                optimized=False,
+                original_content=original_content,
+                optimized_content=original_content,
+                findings=llm_result.findings,
+                changes=llm_result.changes,
+                validation_passed=False,
+                validation_errors=[error],
+            )
+
+        # --------------------------------------------------------------
+        # Validate / convert.
+        # --------------------------------------------------------------
+
+        converted_content, conversion_errors = self._validate_and_convert_section(
+            section=section,
+            optimized_content_json=(llm_result.optimized_content_json),
+        )
+
+        if conversion_errors:
+            return SectionOptimizationResult(
+                section=section,
+                optimized=False,
+                original_content=original_content,
+                optimized_content=original_content,
+                findings=llm_result.findings,
+                changes=llm_result.changes,
+                validation_passed=False,
+                validation_errors=conversion_errors,
+            )
+
+        # --------------------------------------------------------------
+        # Successfully validated.
+        # --------------------------------------------------------------
+
+        return SectionOptimizationResult(
+            section=section,
+            optimized=True,
+            original_content=original_content,
+            optimized_content=converted_content,
+            findings=llm_result.findings,
+            changes=llm_result.changes,
+            validation_passed=True,
+            validation_errors=[],
+        )
+
+    # ======================================================================
     # SECTION EXTRACTION
-    # ================================================================
+    # ======================================================================
 
     def _get_section_content(
         self,
@@ -229,8 +426,8 @@ class ResumeOptimizerService:
         """
         Get a section from ResumeAST.
 
-        Explicit mapping is intentional. It prevents the optimizer
-        from depending on arbitrary attribute names.
+        Explicit mapping is intentional. It prevents the optimizer from
+        depending on arbitrary attribute names.
         """
 
         section_mapping: dict[ResumeSection, Any] = {
@@ -244,130 +441,115 @@ class ResumeOptimizerService:
 
         return section_mapping.get(section)
 
-    # ================================================================
-    # SECTION TYPE MAPPING
-    # ================================================================
-
-    def _get_section_model(
-        self,
-        section: ResumeSection,
-    ) -> Type[BaseModel] | None:
-        """
-        Return the Pydantic model expected for an individual item
-        in a structured ResumeAST section.
-
-        Sections that contain primitive values rather than Pydantic
-        models return None.
-        """
-
-        model_mapping: dict[
-            ResumeSection,
-            Type[BaseModel],
-        ] = {
-            ResumeSection.EXPERIENCE: Experience,
-            ResumeSection.SKILLS: Skill,
-            ResumeSection.PROJECTS: Project,
-            ResumeSection.EDUCATION: Education,
-            ResumeSection.CERTIFICATIONS: Certification,
-        }
-
-        return model_mapping.get(section)
-
-    # ================================================================
-    # LLM OUTPUT VALIDATION / CONVERSION
-    # ================================================================
+    # ======================================================================
+    # SECTION TYPE VALIDATION
+    # ======================================================================
 
     def _validate_and_convert_section(
         self,
         section: ResumeSection,
-        optimized_content: Any,
+        optimized_content_json: str,
     ) -> tuple[Any, list[str]]:
         """
-        Convert generic LLM output into the exact type expected
-        by ResumeAST.
+        Deserialize and validate LLM-generated section content.
 
-        This is the critical safety boundary between the LLM and
-        the canonical ResumeAST.
+        The JSON is first parsed using json.loads(), then validated
+        against the exact expected ResumeAST section type.
+
+        Examples:
+
+            summary
+                → str
+
+            experience
+                → list[Experience]
+
+            skills
+                → list[Skill]
+
+            projects
+                → list[Project]
+
+            education
+                → list[Education]
+
+            certifications
+                → list[Certification]
         """
 
-        try:
+        adapter = SECTION_TYPE_ADAPTERS.get(section)
 
-            # --------------------------------------------------------
-            # SUMMARY
-            # --------------------------------------------------------
-
-            if section == ResumeSection.SUMMARY:
-
-                if optimized_content is None:
-                    return None, []
-
-                if not isinstance(optimized_content, str):
-                    return (
-                        None,
-                        ["Summary optimization must return a string."],
-                    )
-
-                return optimized_content.strip(), []
-
-            # --------------------------------------------------------
-            # Structured list sections
-            # --------------------------------------------------------
-
-            model_class = self._get_section_model(section)
-
-            if model_class is not None:
-
-                if not isinstance(optimized_content, list):
-                    return (
-                        None,
-                        [f"{section.value} optimization must " "return a list."],
-                    )
-
-                validated_items: list[BaseModel] = []
-
-                for index, item in enumerate(optimized_content):
-
-                    try:
-                        if isinstance(item, model_class):
-                            validated_item = item
-                        else:
-                            validated_item = model_class.model_validate(item)
-
-                        validated_items.append(validated_item)
-
-                    except ValidationError as exc:
-                        return (
-                            None,
-                            [
-                                (
-                                    f"{section.value}[{index}] "
-                                    f"failed validation: {error}"
-                                )
-                                for error in exc.errors()
-                            ],
-                        )
-
-                return validated_items, []
-
+        if adapter is None:
             return (
                 None,
                 [
                     (
-                        f"No ResumeAST conversion rule exists "
+                        "No ResumeAST conversion rule exists "
                         f"for section '{section.value}'."
                     )
                 ],
             )
 
+        # ------------------------------------------------------------------
+        # Deserialize JSON returned by the LLM.
+        # ------------------------------------------------------------------
+
+        try:
+            raw_content = json.loads(optimized_content_json)
+        except json.JSONDecodeError as exc:
+            start = max(0, exc.pos - 200)
+            end = min(len(optimized_content_json), exc.pos + 200)
+
+            context = optimized_content_json[start:end]
+
+            raise ValueError(
+                f"optimized_content_json is not valid JSON: {exc}\n"
+                f"Position: {exc.pos}\n"
+                f"Context:\n{context}"
+            ) from exc
+
+        # ------------------------------------------------------------------
+        # Validate against exact ResumeAST type.
+        # ------------------------------------------------------------------
+
+        try:
+            validated_content = adapter.validate_python(raw_content)
+
+            return validated_content, []
+
+        except ValidationError as exc:
+            errors = []
+
+            for error in exc.errors():
+                location = ".".join(str(part) for part in error.get("loc", ()))
+
+                message = error.get(
+                    "msg",
+                    "Validation error",
+                )
+
+                if location:
+                    errors.append((f"{section.value}" f"[{location}]: {message}"))
+                else:
+                    errors.append(f"{section.value}: {message}")
+
+            return None, errors
+
         except Exception as exc:
             return (
                 None,
-                [f"Failed to validate {section.value} " f"optimization: {exc}"],
+                [
+                    (
+                        f"{section.value}: "
+                        "Failed to validate optimized content: "
+                        f"{exc}"
+                    )
+                ],
             )
 
-    # ================================================================
+    # ======================================================================
     # APPLY VALIDATED RESULT
-    # ================================================================
+    # ======================================================================
 
     def _apply_section_result(
         self,
@@ -375,11 +557,17 @@ class ResumeOptimizerService:
         result: SectionOptimizationResult,
     ) -> None:
         """
-        Apply validated optimization content to a ResumeAST.
+        Apply validated optimization content to ResumeAST.
 
-        This method should only receive content that has already
-        passed _validate_and_convert_section().
+        This method should only receive content that has already passed
+        _validate_and_convert_section().
         """
+
+        if not result.validation_passed:
+            raise ValueError(
+                "Cannot apply a section that failed validation: "
+                f"{result.section.value}"
+            )
 
         section = result.section
         content = result.optimized_content
@@ -410,14 +598,17 @@ class ResumeOptimizerService:
 
         raise ValueError(f"Unsupported resume section: {section}")
 
-    # ================================================================
+    # ======================================================================
     # GUIDELINES
-    # ================================================================
+    # ======================================================================
 
     def _get_guidelines(
         self,
         request: ResumeOptimizationRequest,
     ) -> list[OptimizationGuideline]:
+        """
+        Return request-specific guidelines or the default ATS guidelines.
+        """
 
         if request.guidelines:
             return request.guidelines
@@ -429,6 +620,9 @@ class ResumeOptimizerService:
         section: ResumeSection,
         guidelines: list[OptimizationGuideline],
     ) -> list[OptimizationGuideline]:
+        """
+        Filter guidelines applicable to the current section.
+        """
 
         return [
             guideline
@@ -440,6 +634,11 @@ class ResumeOptimizerService:
     def _default_guidelines(
         self,
     ) -> list[OptimizationGuideline]:
+        """
+        Default general ATS optimization guidelines.
+
+        These guidelines constrain what the LLM is allowed to change.
+        """
 
         return [
             OptimizationGuideline(
@@ -486,7 +685,9 @@ class ResumeOptimizerService:
                     "Group existing skills into meaningful categories "
                     "without adding skills."
                 ),
-                applies_to=[ResumeSection.SKILLS],
+                applies_to=[
+                    ResumeSection.SKILLS,
+                ],
             ),
             OptimizationGuideline(
                 id="remove_redundancy",
@@ -513,23 +714,23 @@ class ResumeOptimizerService:
             ),
         ]
 
-    # ================================================================
+    # ======================================================================
     # SERIALIZATION
-    # ================================================================
+    # ======================================================================
 
     def _serialize_ast(
         self,
         resume_ast: ResumeAST,
     ) -> dict[str, Any]:
         """
-        Serialize ResumeAST using Pydantic v2's JSON-compatible mode.
+        Serialize ResumeAST using Pydantic v2 JSON-compatible mode.
         """
 
         return resume_ast.model_dump(mode="json")
 
-    # ================================================================
+    # ======================================================================
     # ERROR HANDLING
-    # ================================================================
+    # ======================================================================
 
     def _failed_section_result(
         self,
@@ -537,6 +738,12 @@ class ResumeOptimizerService:
         content: Any,
         error: str,
     ) -> SectionOptimizationResult:
+        """
+        Create a safe failed result.
+
+        The original content is retained so a failed LLM call can never
+        destroy the existing ResumeAST content.
+        """
 
         return SectionOptimizationResult(
             section=section,
@@ -554,5 +761,19 @@ class ResumeOptimizerService:
         section: ResumeSection,
         errors: list[str],
     ) -> list[str]:
+        """
+        Ensure validation errors are clearly associated with a section.
 
-        return [f"{section.value}: {error}" for error in errors]
+        Avoid double-prefixing errors that already start with the section
+        name.
+        """
+
+        prefixed = []
+
+        for error in errors:
+            if error.startswith(f"{section.value}:"):
+                prefixed.append(error)
+            else:
+                prefixed.append(f"{section.value}: {error}")
+
+        return prefixed

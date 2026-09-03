@@ -12,6 +12,7 @@ from app.models.resume.optimization import (
     OptimizationMode,
     ResumeSection,
     SectionOptimizationResult,
+    SectionOptimizationLLMResult,
 )
 from app.prompts.resume.optimization import (
     ATS_OPTIMIZATION_SYSTEM_PROMPT,
@@ -49,7 +50,7 @@ class SectionOptimizer:
         content: Any,
         guidelines: list[OptimizationGuideline],
         mode: OptimizationMode,
-    ) -> SectionOptimizationResult:
+    ) -> SectionOptimizationLLMResult:
 
         user_prompt = build_section_optimization_user_prompt(
             section=section,
@@ -61,5 +62,5 @@ class SectionOptimizer:
         return self.llm_service.generate_structured(
             system_prompt=ATS_OPTIMIZATION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
-            response_model=SectionOptimizationResult,
+            response_model=SectionOptimizationLLMResult,
         )

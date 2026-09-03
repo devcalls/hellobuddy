@@ -49,7 +49,9 @@ class OptimizationFinding(BaseModel):
     guideline_id: str
     severity: FindingSeverity
     description: str
-    original_text: str | None = None
+
+    # Keep this as a string rather than Any.
+    original_text: str = ""
 
 
 class OptimizationChange(BaseModel):
@@ -57,19 +59,50 @@ class OptimizationChange(BaseModel):
 
     change_type: ChangeType
     guideline_id: str
-    original_text: str | None = None
-    optimized_text: str | None = None
+
+    # Avoid nullable fields in the Gemini response schema.
+    original_text: str = ""
+    optimized_text: str = ""
+
     reason: str
+
+
+class SectionOptimizationLLMResult(BaseModel):
+    """
+    Gemini-facing response model.
+
+    IMPORTANT:
+    This model intentionally does NOT contain Any fields.
+
+    optimized_content_json contains the optimized section serialized
+    as a JSON string. ResumeOptimizerService is responsible for:
+
+        1. Parsing optimized_content_json.
+        2. Validating it against the correct ResumeAST nested model.
+        3. Applying it only if validation succeeds.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    section: ResumeSection
+
+    optimized: bool = False
+
+    optimized_content_json: str = ""
+
+    findings: list[OptimizationFinding] = Field(default_factory=list)
+
+    changes: list[OptimizationChange] = Field(default_factory=list)
 
 
 class SectionOptimizationResult(BaseModel):
     """
-    Generic LLM response for optimizing one ResumeAST section.
+    Application-level result for optimizing one ResumeAST section.
 
-    optimized_content is intentionally Any here.
+    This is NOT used directly as the Gemini response schema.
 
-    ResumeOptimizerService is responsible for converting it into
-    the correct ResumeAST/Pydantic type.
+    original_content and optimized_content are allowed to be heterogeneous
+    because different ResumeAST sections have different Pydantic types.
     """
 
     model_config = ConfigDict(extra="forbid")
