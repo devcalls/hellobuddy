@@ -34,6 +34,14 @@ class FindingSeverity(str, Enum):
     HIGH = "high"
 
 
+class FindingCategory(str, Enum):
+    STYLE = "style"
+    ATS = "ats"
+    CONTENT = "content"
+    EVIDENCE = "evidence"
+    STRUCTURE = "structure"
+
+
 class OptimizationGuideline(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -47,10 +55,9 @@ class OptimizationFinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     guideline_id: str
+    category: FindingCategory = FindingCategory.CONTENT
     severity: FindingSeverity
     description: str
-
-    # Keep this as a string rather than Any.
     original_text: str = ""
 
 
@@ -59,50 +66,51 @@ class OptimizationChange(BaseModel):
 
     change_type: ChangeType
     guideline_id: str
-
-    # Avoid nullable fields in the Gemini response schema.
     original_text: str = ""
     optimized_text: str = ""
-
     reason: str
 
 
 class SectionOptimizationLLMResult(BaseModel):
     """
-    Gemini-facing response model.
+    Strict schema exposed to Gemini.
 
-    IMPORTANT:
-    This model intentionally does NOT contain Any fields.
+    Important:
+    optimized_content_json deliberately remains a string.
 
-    optimized_content_json contains the optimized section serialized
-    as a JSON string. ResumeOptimizerService is responsible for:
+    Gemini generates:
+        outer JSON
+            |
+            +-- optimized_content_json
+                    |
+                    +-- JSON representation of actual AST section
 
-        1. Parsing optimized_content_json.
-        2. Validating it against the correct ResumeAST nested model.
-        3. Applying it only if validation succeeds.
+    Python subsequently parses and validates that inner JSON against
+    the canonical ResumeAST models.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     section: ResumeSection
-
     optimized: bool = False
 
     optimized_content_json: str = ""
 
-    findings: list[OptimizationFinding] = Field(default_factory=list)
+    findings: list[OptimizationFinding] = Field(
+        default_factory=list
+    )
 
-    changes: list[OptimizationChange] = Field(default_factory=list)
+    changes: list[OptimizationChange] = Field(
+        default_factory=list
+    )
 
 
 class SectionOptimizationResult(BaseModel):
     """
-    Application-level result for optimizing one ResumeAST section.
+    Application-level result.
 
-    This is NOT used directly as the Gemini response schema.
-
-    original_content and optimized_content are allowed to be heterogeneous
-    because different ResumeAST sections have different Pydantic types.
+    This model is NOT sent to Gemini because it contains heterogeneous
+    Any fields.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -112,16 +120,20 @@ class SectionOptimizationResult(BaseModel):
     optimized: bool = False
 
     original_content: Any
-
     optimized_content: Any
 
-    findings: list[OptimizationFinding] = Field(default_factory=list)
+    findings: list[OptimizationFinding] = Field(
+        default_factory=list
+    )
 
-    changes: list[OptimizationChange] = Field(default_factory=list)
+    changes: list[OptimizationChange] = Field(
+        default_factory=list
+    )
 
     validation_passed: bool = True
-
-    validation_errors: list[str] = Field(default_factory=list)
+    validation_errors: list[str] = Field(
+        default_factory=list
+    )
 
 
 class ResumeOptimizationRequest(BaseModel):
@@ -140,7 +152,9 @@ class ResumeOptimizationRequest(BaseModel):
         ]
     )
 
-    guidelines: list[OptimizationGuideline] = Field(default_factory=list)
+    guidelines: list[OptimizationGuideline] = Field(
+        default_factory=list
+    )
 
 
 class ResumeOptimizationResult(BaseModel):
@@ -152,8 +166,12 @@ class ResumeOptimizationResult(BaseModel):
 
     optimized_resume: dict[str, Any]
 
-    sections: list[SectionOptimizationResult] = Field(default_factory=list)
+    sections: list[SectionOptimizationResult] = Field(
+        default_factory=list
+    )
 
     validation_passed: bool = True
 
-    validation_errors: list[str] = Field(default_factory=list)
+    validation_errors: list[str] = Field(
+        default_factory=list
+    )

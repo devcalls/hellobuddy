@@ -2,16 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.config.resume_settings import ResumeSettings
 from app.integration.ai.llm import (
     LLMService,
     LLMServiceFactory,
 )
-from app.config.resume_settings import ResumeSettings
 from app.models.resume.optimization import (
     OptimizationGuideline,
     OptimizationMode,
     ResumeSection,
-    SectionOptimizationResult,
     SectionOptimizationLLMResult,
 )
 from app.prompts.resume.optimization import (
@@ -22,11 +21,19 @@ from app.prompts.resume.optimization import (
 
 class SectionOptimizer:
     """
-    Optimizes a single ResumeAST section using the LLM.
+    Performs LLM optimization of one ResumeAST section.
 
-    The optimizer does not modify ResumeAST directly. It returns a
-    SectionOptimizationResult which is subsequently validated and
-    applied by the resume optimization service.
+    This class intentionally does not mutate the ResumeAST.
+
+    It is responsible only for:
+
+        Resume section
+             ↓
+        optimization prompt
+             ↓
+        LLM
+             ↓
+        SectionOptimizationLLMResult
     """
 
     def __init__(
@@ -36,13 +43,15 @@ class SectionOptimizer:
     ) -> None:
 
         self.settings = settings
-        if llm_service:
 
+        if llm_service is not None:
             self.llm_service = llm_service
-
         else:
-
-            self.llm_service = LLMServiceFactory.create(settings=settings.llm)
+            self.llm_service = (
+                LLMServiceFactory.create(
+                    settings=settings.llm
+                )
+            )
 
     def optimize(
         self,
@@ -52,15 +61,28 @@ class SectionOptimizer:
         mode: OptimizationMode,
     ) -> SectionOptimizationLLMResult:
 
-        user_prompt = build_section_optimization_user_prompt(
-            section=section,
-            content=content,
-            guidelines=guidelines,
-            mode=mode,
+        user_prompt = (
+            build_section_optimization_user_prompt(
+                section=section,
+                content=content,
+                guidelines=guidelines,
+                mode=mode,
+            )
         )
 
-        return self.llm_service.generate_structured(
+        result = self.llm_service.generate_structured(
             system_prompt=ATS_OPTIMIZATION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             response_model=SectionOptimizationLLMResult,
         )
+
+        # The LLM must not be allowed to claim it optimized
+        # one section while returning another.
+        if result.section != section:
+            raise ValueError(
+                "LLM returned section "
+                f"'{result.section.value}' while "
+                f"'{section.value}' was requested."
+            )
+
+        return result

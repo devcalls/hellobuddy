@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from textwrap import dedent
+import json
+from typing import Any
 
 from app.models.resume.optimization import (
     OptimizationGuideline,
@@ -8,548 +9,636 @@ from app.models.resume.optimization import (
     ResumeSection,
 )
 
-# ============================================================================
-# DEFAULT ATS GUIDELINES
-# ============================================================================
-
-DEFAULT_ATS_GUIDELINES = [
-    OptimizationGuideline(
-        id="active_voice",
-        description=(
-            "Prefer active voice. Rewrite passive or indirect constructions "
-            "using clear, direct action verbs while preserving factual meaning."
-        ),
-        applies_to=[
-            ResumeSection.SUMMARY,
-            ResumeSection.EXPERIENCE,
-            ResumeSection.PROJECTS,
-        ],
-    ),
-    OptimizationGuideline(
-        id="concise_language",
-        description=(
-            "Use concise language. Remove unnecessary words, repetition, "
-            "and vague introductory phrases without removing meaningful facts."
-        ),
-        applies_to=[
-            ResumeSection.SUMMARY,
-            ResumeSection.EXPERIENCE,
-            ResumeSection.PROJECTS,
-        ],
-    ),
-    OptimizationGuideline(
-        id="achievement_oriented",
-        description=(
-            "Where the original content supports it, emphasize outcomes, "
-            "impact, scope, ownership, and accomplishments rather than "
-            "generic responsibilities."
-        ),
-        applies_to=[
-            ResumeSection.EXPERIENCE,
-            ResumeSection.PROJECTS,
-        ],
-    ),
-    OptimizationGuideline(
-        id="preserve_metrics",
-        description=(
-            "Preserve existing numbers, percentages, monetary values, "
-            "timeframes, scale indicators, and measurable outcomes."
-        ),
-        applies_to=[
-            ResumeSection.SUMMARY,
-            ResumeSection.EXPERIENCE,
-            ResumeSection.PROJECTS,
-        ],
-    ),
-    OptimizationGuideline(
-        id="preserve_technical_terms",
-        description=(
-            "Preserve meaningful technologies, tools, platforms, "
-            "programming languages, frameworks, methodologies, and domain "
-            "terminology already present in the source."
-        ),
-        applies_to=[
-            ResumeSection.SUMMARY,
-            ResumeSection.EXPERIENCE,
-            ResumeSection.SKILLS,
-            ResumeSection.PROJECTS,
-        ],
-    ),
-    OptimizationGuideline(
-        id="group_skills",
-        description=(
-            "Group existing skills into meaningful categories. Do not "
-            "invent skills or add technologies that are not present in "
-            "the original resume."
-        ),
-        applies_to=[
-            ResumeSection.SKILLS,
-        ],
-    ),
-    OptimizationGuideline(
-        id="remove_redundancy",
-        description=(
-            "Reduce unnecessary repetition while preserving distinct "
-            "facts and achievements."
-        ),
-        applies_to=[
-            ResumeSection.SUMMARY,
-            ResumeSection.EXPERIENCE,
-            ResumeSection.SKILLS,
-            ResumeSection.PROJECTS,
-        ],
-    ),
-    OptimizationGuideline(
-        id="standardize_terminology",
-        description=(
-            "Use consistent terminology for the same technology, role, "
-            "methodology, or concept when the meaning is unchanged."
-        ),
-        applies_to=[
-            ResumeSection.SUMMARY,
-            ResumeSection.EXPERIENCE,
-            ResumeSection.SKILLS,
-            ResumeSection.PROJECTS,
-        ],
-    ),
-    OptimizationGuideline(
-        id="no_new_facts",
-        description=(
-            "Do not invent or infer unsupported facts. Never introduce "
-            "new technologies, skills, metrics, responsibilities, "
-            "achievements, companies, dates, titles, certifications, "
-            "education, or unsupported claims."
-        ),
-        applies_to=list(ResumeSection),
-    ),
-]
 
+ATS_OPTIMIZATION_SYSTEM_PROMPT = """
+You are an expert ATS resume optimization engine.
 
-# ============================================================================
-# SYSTEM PROMPT
-# ============================================================================
+Your job is NOT merely to correct grammar.
 
-ATS_OPTIMIZATION_SYSTEM_PROMPT = dedent("""
-    You are an expert resume editor specializing in ATS-friendly
-    resume optimization.
+Your job is to improve the resume's ability to communicate
+relevant professional value to both:
 
-    Your task is to optimize ONE existing ResumeAST section while
-    preserving the factual meaning and structural integrity of the
-    supplied content.
+1. Applicant Tracking Systems
+2. Human recruiters and hiring managers
 
-    ------------------------------------------------------------------------
-    CORE PRINCIPLES
-    ------------------------------------------------------------------------
+while preserving the truth of the original resume.
 
-    1. NEVER INVENT INFORMATION
+============================================================
+ABSOLUTE FACT-PRESERVATION RULE
+============================================================
 
-       Only use information contained in the supplied original section.
+The source ResumeAST is authoritative.
 
-       Do not introduce:
-       - new technologies
-       - new skills
-       - new metrics
-       - new achievements
-       - new responsibilities
-       - new companies
-       - new job titles
-       - new dates
-       - new certifications
-       - new education
-       - unsupported claims
-       - inferred facts that are not explicitly supported
+You MUST NOT invent, infer, embellish, or fabricate:
 
-    2. NEVER FABRICATE OR IMPROVE METRICS
+- technologies
+- frameworks
+- programming languages
+- tools
+- platforms
+- skills
+- metrics
+- percentages
+- monetary values
+- team sizes
+- customer counts
+- performance improvements
+- business outcomes
+- responsibilities
+- job titles
+- companies
+- dates
+- certifications
+- degrees
+- projects
+- awards
+- patents
+- leadership scope
+- geographic scope
+- architecture scope
 
-       Existing numbers, percentages, monetary values, durations,
-       quantities, scale indicators, and measurable outcomes must be
-       preserved exactly unless a purely grammatical or formatting
-       change is required.
+If an outcome is not explicitly supported by the source,
+DO NOT create one.
 
-    3. PRESERVE TECHNICAL TERMINOLOGY
+For example:
 
-       Preserve meaningful technologies, tools, frameworks, platforms,
-       methodologies, programming languages, and domain terminology
-       already present in the original content.
+SOURCE:
+"Designed a microservices architecture."
 
-    4. PRESERVE FACTUAL MEANING
+GOOD:
+"Designed a microservices architecture using Spring Boot."
 
-       Rewriting may improve wording, clarity, structure, and
-       conciseness, but must not change what the candidate actually
-       did or achieved.
+ONLY IF Spring Boot is present in the source.
 
-    5. PREFER ACTIVE VOICE
+BAD:
+"Designed a microservices architecture that reduced latency by 40%."
 
-       Use strong, direct action verbs where the original content
-       supports doing so.
+The 40% is fabricated unless the source explicitly provides it.
 
-    6. BE CONCISE
+============================================================
+OPTIMIZATION HIERARCHY
+============================================================
 
-       Remove filler, unnecessary repetition, vague introductory
-       language, and unnecessarily complex phrasing.
+Optimize in this order:
 
-    7. EMPHASIZE ACHIEVEMENTS
+1. FACT PRESERVATION
+2. CLARITY
+3. ACHIEVEMENT ORIENTATION
+4. ATS TERMINOLOGY
+5. CONCISENESS
+6. READABILITY
 
-       Where the original content supports it, make outcomes,
-       impact, ownership, scope, and measurable results clearer.
+Never sacrifice a higher-priority rule for a lower-priority rule.
 
-       Do NOT manufacture an outcome if the original content does
-       not provide one.
+============================================================
+ACHIEVEMENT TRANSFORMATION
+============================================================
 
-    8. DO NOT KEYWORD-STUFF
+When optimizing experience or project achievements, use this
+mental structure:
 
-       Do not add keywords merely because they may be ATS-friendly.
+ACTION + WHAT + HOW + SCOPE/CONTEXT + OUTCOME
 
-       Keywords must come from the existing resume content or,
-       in TARGETED_JD mode, be explicitly supported by the supplied
-       job description.
+But only include components supported by the source.
 
-    9. GENERAL ATS MODE
+For example:
 
-       When optimization mode is GENERAL_ATS and no job description
-       is supplied, optimize for broadly accepted ATS-friendly
-       resume writing practices.
+Weak:
+"Responsible for designing APIs."
 
-       Do NOT optimize toward a hypothetical job description.
+Better:
+"Designed REST APIs for the platform."
 
-    10. TARGETED JD MODE
+If the source says Spring Boot:
 
-        When optimization mode is TARGETED_JD, use the supplied job
-        description only to improve alignment where the candidate's
-        existing content supports that alignment.
+"Designed REST APIs using Spring Boot for the platform."
 
-        Never add a skill, technology, responsibility, achievement,
-        metric, title, or qualification merely because it appears
-        in the job description.
+If the source provides an outcome:
 
-    11. PRESERVE SECTION STRUCTURE
+"Designed REST APIs using Spring Boot, improving ..."
 
-        The optimized content must have the SAME structural type as
-        the supplied section.
+Only include the outcome if explicitly supported.
 
-        Examples:
+============================================================
+RESPONSIBILITY → ACHIEVEMENT
+============================================================
 
-        summary
-            → string
+Where possible, transform responsibility language into
+strong professional action language.
 
-        experience
-            → list of experience objects
+Examples:
 
-        skills
-            → list of skill objects
+"Responsible for architecture reviews"
+→
+"Led architecture review sessions..."
 
-        projects
-            → list of project objects
+"Worked on cloud migration"
+→
+"Delivered cloud migration initiatives..."
 
-        education
-            → list of education objects
+But do NOT invent an outcome.
 
-        certifications
-            → list of certification objects
+============================================================
+ACTION VERBS
+============================================================
 
-        Do not change a list into a string or a string into a list.
+Prefer precise verbs such as:
 
-    12. PRESERVE OBJECT STRUCTURE
+Architected
+Designed
+Led
+Built
+Implemented
+Engineered
+Developed
+Delivered
+Modernized
+Integrated
+Automated
+Established
+Defined
+Evaluated
+Recommended
+Advised
+Mentored
+Optimized
+Migrated
+Designed
+Orchestrated
 
-        For structured ResumeAST sections:
+Do not mechanically change every verb.
+Choose the verb that accurately reflects the source.
 
-        - preserve existing object fields
-        - preserve dates
-        - preserve companies
-        - preserve titles
-        - preserve education institutions
-        - preserve certifications
-        - preserve project identities
-        - preserve existing evidence/provenance fields where present
+============================================================
+ATS TERMINOLOGY
+============================================================
 
-        Only modify fields whose textual content genuinely benefits
-        from optimization.
+Use standard terminology where it is already supported by
+the source.
 
-    13. MINIMIZE CHANGES
+Examples:
 
-        Make the smallest meaningful change necessary.
+"Rabbit MQ" → "RabbitMQ"
+"MySql" → "MySQL"
+"PostGre" → "PostgreSQL"
+"Dynamo DB" → "DynamoDB"
+"Mongo DB" → "MongoDB"
 
-        If the original content is already strong, leave it unchanged.
+Do not introduce a technology merely because it is commonly
+associated with another technology.
 
-    14. EVERY CHANGE MUST BE TRACEABLE
+============================================================
+TECHNOLOGY PRESERVATION
+============================================================
 
-        Every reported change must be supported by the original
-        content and motivated by one of the supplied guidelines.
+Do not remove meaningful technology names.
 
-    ------------------------------------------------------------------------
-    RESPONSE CONTRACT
-    ------------------------------------------------------------------------
+Do not replace a specific technology with a vague category.
 
-    The response must conform EXACTLY to the requested structured
-    response model.
+BAD:
+"LangGraph" → "AI framework"
 
-    The response contains:
+GOOD:
+"LangGraph" remains explicitly visible.
 
-        section
-        optimized
-        optimized_content_json
-        findings
-        changes
+============================================================
+METRICS
+============================================================
 
-    `optimized_content_json` has a special requirement:
+Preserve every meaningful:
 
-        It MUST be a STRING containing valid JSON.
+- number
+- percentage
+- duration
+- year
+- scale indicator
+- count
+- monetary value
 
-        The JSON contained inside that string must represent the
-        optimized ResumeAST section.
+Never change a metric's meaning.
 
-    Examples:
+============================================================
+PROVENANCE
+============================================================
 
-        For summary:
+Do not create or modify:
 
-            optimized_content_json = "\"Experienced engineering leader...\""
+- source_text
+- evidence
 
-        For a list section:
+Python will restore provenance from the original AST.
 
-            optimized_content_json =
-                "[{\"title\":\"...\",\"company\":\"...\"}]"
+============================================================
+STRUCTURE
+============================================================
 
-    IMPORTANT:
+For general ATS optimization:
 
-    - optimized_content_json must contain valid JSON.
-    - Do NOT put Markdown code fences inside optimized_content_json.
-    - Do NOT put explanatory text inside optimized_content_json.
-    - Do NOT return Python representations such as None, True, or False.
-    - Use valid JSON syntax.
-    - JSON strings must use double quotes.
-    - The JSON must represent the SAME section type as the original.
-    - Do not omit required fields from structured objects.
-    - Do not add arbitrary fields.
+- do not add records
+- do not remove records
+- do not merge unrelated records
+- do not split records
+- do not change identity fields
+- do not change dates
+- do not change companies
+- do not change titles
 
-    If no meaningful optimization is required:
+You may improve textual content within an existing record.
 
-        optimized = false
+============================================================
+SUMMARY
+============================================================
 
-        optimized_content_json may contain the original section
-        serialized as JSON.
+The summary should communicate:
 
-        findings should explain that no meaningful optimization
-        was necessary.
+- current professional identity
+- years of experience when supported
+- leadership level
+- architecture/domain specialization
+- important technologies/domains
+- meaningful differentiators
+- education/certifications only when useful
 
-        changes should be empty.
+Avoid generic phrases such as:
 
-    If optimization is performed:
+"hardworking professional"
+"results-oriented professional"
+"team player"
+"dynamic individual"
 
-        optimized = true
+unless explicitly relevant.
 
-        optimized_content_json must contain the optimized section
-        serialized as JSON.
+============================================================
+EXPERIENCE
+============================================================
 
-    ------------------------------------------------------------------------
-    CHANGE REPORTING
-    ------------------------------------------------------------------------
+Prioritize:
 
-    For every genuine change, report:
+- role ownership
+- architecture
+- leadership
+- technical scope
+- business/domain context
+- technologies
+- measurable evidence
+- meaningful outcomes
 
-        - guideline_id
-        - change_type
-        - original_text
-        - optimized_text
-        - reason
+Do not turn every bullet into a generic action verb rewrite.
 
-    The original_text and optimized_text must describe actual
-    changes made to the supplied content.
+============================================================
+PROJECTS
+============================================================
 
-    Do not report cosmetic or imaginary changes.
+Prioritize:
 
-    ------------------------------------------------------------------------
-    FINAL SAFETY CHECK
-    ------------------------------------------------------------------------
+- what the system/platform/product was
+- what the candidate owned
+- architecture
+- technologies
+- integrations
+- scale
+- domain complexity
+- measurable outcomes
+- leadership
 
-    Before returning the response, verify:
+Where the source supports it, make the achievement itself
+the center of the bullet rather than merely the activity.
 
-        1. No new facts were introduced.
-        2. Existing metrics were preserved.
-        3. Existing technical terminology was preserved.
-        4. Existing dates and factual identifiers were preserved.
-        5. The section structure is unchanged.
-        6. optimized_content_json is valid JSON.
-        7. The JSON inside optimized_content_json represents the
-           correct type for the requested section.
-        8. Every reported change is supported by the original content.
-    """).strip()
+============================================================
+SKILLS
+============================================================
 
+Skills should be:
 
-# ============================================================================
-# USER PROMPT
-# ============================================================================
+- canonicalized
+- consistently capitalized
+- grouped logically
+- easy for ATS systems to identify
+
+Do not add skills.
+
+Do not infer proficiency.
+
+Do not remove legitimate skills simply because they are older.
+
+============================================================
+EDUCATION
+============================================================
+
+Do not rewrite factual identity information.
+
+Only improve presentation where useful.
+
+============================================================
+CERTIFICATIONS
+============================================================
+
+Do not modify certification names or dates.
+
+Only normalize presentation.
+
+============================================================
+OUTPUT
+============================================================
+
+Return only the requested JSON structure.
+
+The optimized_content_json field MUST contain valid JSON.
+
+Do not use markdown fences inside optimized_content_json.
+
+Do not include commentary outside the required schema.
+"""
+
+
+def _section_objective(
+    section: ResumeSection,
+) -> str:
+
+    objectives = {
+        ResumeSection.SUMMARY: """
+SUMMARY OBJECTIVE
+
+Create a concise executive-level summary.
+
+Emphasize:
+- current role
+- experience
+- architecture/technical leadership
+- strongest domains
+- cloud/platform expertise
+- AI/ML expertise where supported
+- differentiators supported by source
+
+Avoid repeating every skill.
+""",
+
+        ResumeSection.EXPERIENCE: """
+EXPERIENCE OBJECTIVE
+
+Optimize experience records for recruiter readability.
+
+Prioritize:
+- ownership
+- architecture
+- leadership
+- delivery
+- technical scope
+- domain scope
+- measurable evidence
+
+If experience records contain no achievements, do not invent them.
+Report that as a STRUCTURE or CONTENT finding.
+""",
+
+        ResumeSection.PROJECTS: """
+PROJECT OBJECTIVE
+
+This is an achievement-focused section.
+
+For each existing achievement:
+
+1. Identify the real action.
+2. Identify what was built/designed/delivered.
+3. Preserve technologies.
+4. Preserve explicit scale.
+5. Preserve explicit outcomes.
+6. Improve clarity.
+7. Make the bullet recruiter-friendly.
+
+Do not manufacture outcomes.
+
+Where several sentences belong to the same achievement, combine
+them only when they already describe the same source-supported work.
+""",
+
+        ResumeSection.SKILLS: """
+SKILLS OBJECTIVE
+
+Normalize and improve ATS discoverability.
+
+Examples:
+
+Rabbit MQ → RabbitMQ
+MySql → MySQL
+PostGre → PostgreSQL
+Dynamo DB → DynamoDB
+Mongo DB → MongoDB
+
+Group skills logically where the existing AST already provides
+categories.
+
+Do not add skills.
+""",
+
+        ResumeSection.EDUCATION: """
+EDUCATION OBJECTIVE
+
+Preserve factual education information.
+
+Only normalize wording/presentation.
+""",
+
+        ResumeSection.CERTIFICATIONS: """
+CERTIFICATIONS OBJECTIVE
+
+Preserve certification names and dates.
+
+Only normalize presentation.
+""",
+    }
+
+    return objectives[section]
+
+
+def _serialize_content(content: Any) -> str:
+    return json.dumps(
+        content,
+        indent=2,
+        ensure_ascii=False,
+        default=str,
+    )
 
 
 def build_section_optimization_user_prompt(
     section: ResumeSection,
-    content: object,
+    content: Any,
     guidelines: list[OptimizationGuideline],
     mode: OptimizationMode,
 ) -> str:
-    """
-    Build the prompt for optimizing one ResumeAST section.
 
-    The LLM receives the current section content and applicable
-    optimization guidelines.
-
-    The LLM must return the optimized section as JSON serialized
-    into `optimized_content_json`.
-    """
-
-    applicable_guidelines = [
-        guideline
+    guideline_text = "\n".join(
+        f"- [{guideline.id}] {guideline.description}"
         for guideline in guidelines
         if guideline.enabled
-        and (not guideline.applies_to or section in guideline.applies_to)
-    ]
+    )
 
-    if applicable_guidelines:
-        guideline_text = "\n".join(
-            f"- {guideline.id}: {guideline.description}"
-            for guideline in applicable_guidelines
-        )
-    else:
-        guideline_text = "- No additional section-specific guidelines."
+       
+    return f"""OPTIMIZATION MODE
+=================
+{mode.value}
 
-    # Serialize the input content as JSON where possible so that the
-    # LLM sees the actual structural representation expected back.
-    import json
+TARGET SECTION
+==============
+{section.value}
 
-    try:
-        serialized_content = json.dumps(
-            content,
-            ensure_ascii=False,
-            indent=2,
-            default=lambda value: (
-                value.model_dump(mode="json")
-                if hasattr(value, "model_dump")
-                else str(value)
-            ),
-        )
-    except Exception:
-        serialized_content = str(content)
+SECTION OBJECTIVE
+=================
+{_section_objective(section)}
 
-    return dedent(f"""
-        Optimize the following ResumeAST section.
+ACTIVE GUIDELINES
+=================
+{guideline_text}
 
-        --------------------------------------------------------------------
-        OPTIMIZATION MODE
-        --------------------------------------------------------------------
+ORIGINAL SECTION
+================
+{_serialize_content(content)}
 
-        {mode.value}
+INSTRUCTIONS
+============
 
-        --------------------------------------------------------------------
-        RESUME SECTION
-        --------------------------------------------------------------------
+Analyze the original section before rewriting it.
 
-        {section.value}
+Identify findings in these categories where applicable:
 
-        --------------------------------------------------------------------
-        APPLICABLE ATS GUIDELINES
-        --------------------------------------------------------------------
+STYLE
+- grammar
+- passive voice
+- verbosity
+- awkward wording
 
-        {guideline_text}
+ATS
+- non-standard terminology
+- inconsistent technology names
+- poor keyword discoverability
 
-        --------------------------------------------------------------------
-        ORIGINAL SECTION CONTENT
-        --------------------------------------------------------------------
+CONTENT
+- weak action framing
+- vague responsibilities
+- redundancy
+- missing clarity
 
-        {serialized_content}
+EVIDENCE
+- explicit metrics
+- explicit scale
+- explicit outcomes
+- evidence that should be preserved
 
-        --------------------------------------------------------------------
-        TASK
-        --------------------------------------------------------------------
+STRUCTURE
+- missing achievement content
+- weak grouping
+- structurally incomplete information
 
-        Analyze the original section against the applicable guidelines.
+Then optimize the section.
 
-        Identify only genuine optimization opportunities.
+IMPORTANT FACT RULES
+====================
 
-        If an improvement is needed:
+Do not invent facts.
 
-        - make the smallest meaningful change
-        - preserve the original factual meaning
-        - preserve all existing metrics
-        - preserve existing technologies
-        - preserve existing dates
-        - preserve existing companies and titles
-        - preserve existing certifications and education
-        - do not introduce unsupported information
-        - preserve the section's structural type
-        - preserve required object fields
+Do not add technologies.
 
-        If no meaningful improvement is needed:
+Do not add skills.
 
-        - return optimized=false
-        - return the original content unchanged
-        - return no unnecessary changes
+Do not add metrics.
 
-        --------------------------------------------------------------------
-        JSON SERIALIZATION REQUIREMENT
-        --------------------------------------------------------------------
+Do not add outcomes.
 
-        The `optimized_content_json` field MUST be a STRING.
+Do not add responsibilities.
 
-        That string must contain valid JSON representing the optimized
-        section.
+Do not add team sizes.
 
-        The JSON inside the string must have the same structural type
-        as the original section.
+Do not add customer counts.
 
-        Examples:
+Do not add percentages.
 
-        summary:
+Do not change dates.
 
-            "optimized_content_json": "\"Engineering leader with ...\""
+Do not change companies.
 
-        experience:
+Do not change titles.
 
-            "optimized_content_json": "[{{...}}, {{...}}]"
+Do not remove meaningful technologies.
 
-        skills:
+Do not remove explicit metrics.
 
-            "optimized_content_json": "[{{...}}, {{...}}]"
+Do not remove explicit outcomes.
 
-        projects:
+Do not add or remove records.
 
-            "optimized_content_json": "[{{...}}, {{...}}]"
+Do not merge or split records.
 
-        education:
+IMPORTANT PROVENANCE RULES
+==========================
 
-            "optimized_content_json": "[{{...}}, {{...}}]"
+Do not modify source_text.
 
-        certifications:
+Do not modify evidence.
 
-            "optimized_content_json": "[{{...}}, {{...}}]"
+Python will restore provenance from the original AST.
 
-        Do NOT put Markdown fences around the JSON.
+OPTIMIZED CONTENT FORMAT
+========================
 
-        Do NOT put explanations inside optimized_content_json.
+optimized_content_json must contain the JSON representation
+of the optimized section itself.
 
-        --------------------------------------------------------------------
-        CHANGE REPORTING
-        --------------------------------------------------------------------
+For example, for SUMMARY:
 
-        For every genuine change, report:
+"Senior Principal Architect with ..."
 
-        - guideline_id
-        - change_type
-        - original_text
-        - optimized_text
-        - reason
+For EXPERIENCE:
 
-        Every change must be directly supported by the original content.
+[
+  {{
+    "company": "...",
+    "title": "...",
+    ...
+  }}
+]
 
-        --------------------------------------------------------------------
-        FINAL CHECK
-        --------------------------------------------------------------------
+For SKILLS:
 
-        Before returning the response, verify that:
+[
+  {{
+    "name": "AWS",
+    "category": "Cloud",
+    ...
+  }}
+]
 
-        - no new facts were introduced
-        - no metrics were fabricated or modified
-        - existing technical terms were preserved
-        - the structural type of the section is unchanged
-        - optimized_content_json contains valid JSON
-        - optimized_content_json represents the correct section type
-        - every reported change is genuine
-        """).strip()
+For PROJECTS:
+
+[
+  {{
+    "name": "...",
+    "description": "...",
+    "achievements": [...]
+  }}
+]
+
+Do NOT JSON-encode each list item separately.
+
+Do NOT return an array of JSON strings.
+
+Do NOT wrap optimized_content_json in another JSON string.
+
+The value of optimized_content_json must be a JSON string
+whose parsed value is directly the requested section.
+
+For every meaningful change, report:
+
+- change_type
+- guideline_id
+- original_text
+- optimized_text
+- reason
+
+If no meaningful optimization is possible:
+
+optimized = false
+
+and return the original content unchanged.
+
+Return ONLY the requested structured response.
+"""

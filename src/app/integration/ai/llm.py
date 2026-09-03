@@ -209,29 +209,93 @@ class GeminiLLMService(LLMService):
         return resolve(schema)
 
     @classmethod
+    def _dereference_schema(
+        cls,
+        schema: dict,
+    ) -> dict:
+
+        defs = schema.get("$defs", {})
+
+        def resolve(node):
+
+            if isinstance(node, dict):
+
+                ref = node.get("$ref")
+
+                if ref:
+                    ref_name = ref.split("/")[-1]
+
+                    if ref_name not in defs:
+                        raise ValueError(
+                            f"Unable to resolve schema reference: "
+                            f"{ref}"
+                        )
+
+                    resolved = resolve(
+                        defs[ref_name]
+                    )
+
+                    extra = {
+                        key: value
+                        for key, value in node.items()
+                        if key != "$ref"
+                    }
+
+                    if (
+                        extra
+                        and isinstance(
+                            resolved,
+                            dict,
+                        )
+                    ):
+                        resolved = {
+                            **resolved,
+                            **extra,
+                        }
+
+                    return resolved
+
+                return {
+                    key: resolve(value)
+                    for key, value in node.items()
+                    if key != "$defs"
+                }
+
+            if isinstance(node, list):
+                return [
+                    resolve(item)
+                    for item in node
+                ]
+
+            return node
+
+        return resolve(schema)
+
+
+    @classmethod
     def _clean_schema(
         cls,
-        schema: Any,
-    ) -> Any:
+        schema,
+    ):
         """
-        Convert Pydantic's JSON Schema into the subset accepted
-        by Gemini's response_schema.
+        Convert Pydantic JSON Schema into a Gemini-compatible
+        response schema.
 
-        The application continues to use the original Pydantic
-        models for strict validation. This method only simplifies
-        the schema sent to the LLM provider.
+        Pydantic remains strict inside Python.
+
+        Gemini receives only the subset of JSON Schema that its
+        response_schema implementation accepts.
         """
 
         if isinstance(schema, list):
-            return [cls._clean_schema(item) for item in schema]
+            return [
+                cls._clean_schema(item)
+                for item in schema
+            ]
 
         if not isinstance(schema, dict):
             return schema
 
-        cleaned = {}
-
-        # JSON Schema constructs that should not be sent to
-        # Gemini's response_schema representation.
         unsupported_keys = {
             "$defs",
             "$schema",
@@ -240,14 +304,20 @@ class GeminiLLMService(LLMService):
             "additionalProperties",
         }
 
+        cleaned = {}
+
         for key, value in schema.items():
 
             if key in unsupported_keys:
                 continue
 
-            cleaned[key] = cls._clean_schema(value)
+            cleaned[key] = cls._clean_schema(
+                value
+            )
 
         return cleaned
+    
+    
 
 
 class OpenAILLMService(LLMService):
