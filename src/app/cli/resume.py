@@ -198,13 +198,23 @@ def _load_resume_ast(
         ) from exc
 
     try:
-        return ResumeAST.model_validate(
+        resume = ResumeAST.model_validate(
             payload
         )
     except Exception as exc:
         raise ValueError(
             f"Invalid ResumeAST in file: {ast_path}: {exc}"
         ) from exc
+
+    # Existing ASTs must satisfy the same semantic invariants
+    # as newly parsed ASTs.
+    from app.services.resume.resume_validation_service import (
+        ResumeValidationService,
+    )
+
+    ResumeValidationService().validate(resume)
+
+    return resume
 
 
 # ----------------------------------------------------------------------

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.config.resume_settings import LLMSettings
+from app.config.llm import LLMSettings
 from app.integration.ai.llm import LLMService
 from app.integration.ai.providers.gemini import (
     GeminiLLMService,
@@ -40,7 +40,7 @@ class LLMServiceFactory:
 
             return OpenAILLMService(
                 api_key=api_key,
-                model=settings.llm.model,
+                model=settings.model,
             )
 
         raise ValueError(

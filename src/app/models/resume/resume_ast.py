@@ -1,553 +1,167 @@
 """
 Canonical Resume Abstract Syntax Tree (ResumeAST).
 
-This module defines the structured representation of a resume.
-
-Design principles:
-    1. The AST represents what is actually present in the resume.
-    2. LLM extraction produces this structure.
-    3. source_text provides provenance back to the original document.
-    4. ExtractionEvidence captures extraction quality.
-    5. Numeric confidence is application-derived, not LLM-generated.
-    6. The AST must not contain ATS optimization logic.
+The AST is application-owned. The LLM never owns canonical IDs or metadata.
 """
 
+from __future__ import annotations
+
 from datetime import date
-from typing import Literal, Optional
+from typing import Literal
 
-from pydantic import BaseModel, Field, ConfigDict
-from uuid import uuid4
-
-from pydantic import BaseModel, Field
-
-
-def generate_id(prefix: str) -> str:
-    return f"{prefix}_{uuid4().hex[:12]}"
-
-# ============================================================
-# Extraction / Provenance
-# ============================================================
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ExtractionEvidence(BaseModel):
-    """
-    Evidence supporting an extracted piece of information.
-
-    The LLM identifies the supporting text, its location, and
-    the qualitative quality of that evidence.
-
-    Numeric confidence and review status are derived by the
-    application after extraction.
-    """
-
     model_config = ConfigDict(extra="forbid")
 
-    source_text: str = Field(
-        description=(
-            "Exact or near-exact text from the original "
-            "resume supporting this extraction."
-        )
-    )
+    source_text: str
+    source_section: str | None = None
+    quality: Literal["high", "medium", "low"] = "high"
+    reason: str | None = None
 
-    source_section: Optional[str] = Field(
-        default=None,
-        description=(
-            "Resume section containing the evidence, "
-            "for example Experience, Education, Skills."
-        ),
-    )
-
-    quality: Literal[
-        "high",
-        "medium",
-        "low",
-    ] = Field(
-        description=(
-            "Qualitative quality of the evidence. "
-            "Use high when the extracted fact is explicitly "
-            "supported by the resume text, medium when there "
-            "is some ambiguity, and low when the evidence is "
-            "weak or inferred."
-        )
-    )
-
-    reason: Optional[str] = Field(
-        default=None,
-        description=(
-            "Explanation of ambiguity or uncertainty "
-            "when the evidence is not high quality."
-        ),
-    )
-
-    # ---------------------------------------------------------
-    # Application-derived fields
-    # ---------------------------------------------------------
-
-    confidence: float = Field(
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description=(
-            "Application-derived confidence score. "
-            "Calculated from evidence quality and other "
-            "validation signals. The LLM must not generate "
-            "this value."
-        ),
-    )
-
-    needs_review: bool = Field(
-        default=False,
-        description=(
-            "Application-derived flag indicating that the "
-            "evidence or extracted value should be reviewed "
-            "by the user."
-        ),
-    )
-
-    extraction_method: Literal[
-        "llm",
-        "user",
-        "system",
-    ] = Field(
-        default="llm", description=("How this information was extracted or created.")
-    )
-
-
-# ============================================================
-# Dates
-# ============================================================
+    # Application-derived fields.
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    needs_review: bool = False
+    extraction_method: Literal["llm", "user", "system"] = "llm"
 
 
 class DateRange(BaseModel):
-    """
-    Represents a date range such as:
-
-        Jan 2022 - Present
-        2019 - 2022
-        June 2020 - Dec 2021
-    """
-
     model_config = ConfigDict(extra="forbid")
 
-    start_date: Optional[date] = Field(
-        default=None, description="Normalized start date."
-    )
-
-    end_date: Optional[date] = Field(default=None, description="Normalized end date.")
-
-    current: bool = Field(
-        default=False,
-        description=(
-            "True when the original resume indicates "
-            "that the position/education/project is current."
-        ),
-    )
-
-    source_text: Optional[str] = Field(
-        default=None,
-        description=(
-            "Original date text from the resume, " "for example 'Jan 2022 - Present'."
-        ),
-    )
-
-    evidence: list[ExtractionEvidence] = Field(
-        default_factory=list, description="Evidence supporting the date extraction."
-    )
-
-
-# ============================================================
-# Contact Information
-# ============================================================
-
-
-class ContactInformation(BaseModel):
-    """
-    Candidate contact information.
-    """
-    id: str = Field(
-        default_factory=lambda: generate_id("achievement")
-    )
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: Optional[str] = None
-
-    email: Optional[str] = None
-
-    phone: Optional[str] = None
-
-    location: Optional[str] = None
-
-    linkedin: Optional[str] = None
-
-    github: Optional[str] = None
-
-    portfolio: Optional[str] = None
-
-    source_text: Optional[str] = Field(
-        default=None,
-        description=("Original resume text supporting the contact " "information."),
-    )
-
+    start_date: date | None = None
+    end_date: date | None = None
+    current: bool = False
+    source_text: str | None = None
     evidence: list[ExtractionEvidence] = Field(default_factory=list)
 
 
-# ============================================================
-# Achievements
-# ============================================================
+class ContactInformation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    location: str | None = None
+    linkedin: str | None = None
+    github: str | None = None
+    portfolio: str | None = None
+
+    source_text: str | None = None
+    evidence: list[ExtractionEvidence] = Field(default_factory=list)
 
 
 class Achievement(BaseModel):
-    """
-    A meaningful accomplishment, responsibility, or
-    achievement extracted from an experience or project.
-    """
-    id: str = Field(
-        default_factory=lambda: generate_id("achievement")
-    )
-
     model_config = ConfigDict(extra="forbid")
 
-    text: str = Field(
-        description=("Original or minimally normalized achievement " "statement.")
-    )
+    id: str
+    text: str
+    action: str | None = None
+    technologies: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    metrics: list[str] = Field(default_factory=list)
+    impact: str | None = None
 
-    action: Optional[str] = Field(
-        default=None,
-        description=(
-            "Primary action expressed by the achievement, "
-            "for example 'Built', 'Led', 'Designed'."
-        ),
-    )
-
-    technologies: list[str] = Field(
-        default_factory=list,
-        description=("Technologies explicitly mentioned in " "the achievement."),
-    )
-
-    skills: list[str] = Field(
-        default_factory=list,
-        description=("Skills explicitly represented by the " "achievement."),
-    )
-
-    metrics: list[str] = Field(
-        default_factory=list,
-        description=("Quantifiable metrics explicitly present " "in the achievement."),
-    )
-
-    impact: Optional[str] = Field(
-        default=None,
-        description=(
-            "Impact explicitly stated or clearly expressed " "in the source text."
-        ),
-    )
-
-    source_text: Optional[str] = Field(
-        default=None,
-        description=("Original resume bullet or text supporting " "this achievement."),
-    )
-
-    evidence: list[ExtractionEvidence] = Field(
-        default_factory=list, description="Evidence supporting this achievement."
-    )
-
-
-# ============================================================
-# Professional Experience
-# ============================================================
+    source_text: str | None = None
+    evidence: list[ExtractionEvidence] = Field(default_factory=list)
 
 
 class Experience(BaseModel):
-    """
-    One professional experience entry.
-    """
-    id: str = Field(
-        default_factory=lambda: generate_id("achievement")
-    )
-
     model_config = ConfigDict(extra="forbid")
 
-    company: str = Field(description="Company or organization name.")
+    id: str
+    company: str
+    title: str
+    date_range: DateRange
 
-    title: str = Field(description="Job title or role.")
+    location: str | None = None
+    description: str | None = None
 
-    date_range: DateRange = Field(description="Employment period.")
+    achievements: list[Achievement] = Field(default_factory=list)
 
-    location: Optional[str] = Field(
-        default=None, description="Work location when available."
-    )
+    # References canonical top-level Project IDs.
+    project_ids: list[str] = Field(default_factory=list)
 
-    description: Optional[str] = Field(
-        default=None, description=("General role description, if present.")
-    )
-
-    achievements: list[Achievement] = Field(
-        default_factory=list, description="Achievements and responsibilities."
-    )
-
-    source_text: Optional[str] = Field(
-        default=None,
-        description=("Original resume text representing this " "experience entry."),
-    )
-
-    evidence: list[ExtractionEvidence] = Field(
-        default_factory=list, description=("Evidence supporting the experience entry.")
-    )
-
-
-# ============================================================
-# Skills
-# ============================================================
+    source_text: str | None = None
+    evidence: list[ExtractionEvidence] = Field(default_factory=list)
 
 
 class Skill(BaseModel):
-    """
-    Individual skill extracted from the resume.
-    """
-    id: str = Field(
-        default_factory=lambda: generate_id("achievement")
-    )
-
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(description="Skill or technology name.")
+    id: str
+    name: str
+    category: str | None = None
+    proficiency: str | None = None
 
-    category: Optional[str] = Field(
-        default=None,
-        description=(
-            "Optional skill category such as "
-            "Programming Language, Cloud, Database, "
-            "Framework, Tool, or Soft Skill."
-        ),
-    )
-
-    proficiency: Optional[str] = Field(
-        default=None,
-        description=("Proficiency level only when explicitly " "stated in the resume."),
-    )
-
-    source_text: Optional[str] = Field(
-        default=None, description=("Original resume text supporting this skill.")
-    )
-
-    evidence: list[ExtractionEvidence] = Field(
-        default_factory=list, description="Evidence supporting this skill."
-    )
-
-
-# ============================================================
-# Education
-# ============================================================
+    source_text: str | None = None
+    evidence: list[ExtractionEvidence] = Field(default_factory=list)
 
 
 class Education(BaseModel):
-    """
-    Academic qualification.
-    """
-    id: str = Field(
-        default_factory=lambda: generate_id("achievement")
-    )
-
     model_config = ConfigDict(extra="forbid")
 
-    institution: str = Field(description="Educational institution.")
+    id: str
+    institution: str
+    degree: str | None = None
+    field_of_study: str | None = None
 
-    degree: Optional[str] = Field(default=None, description="Degree or qualification.")
+    date_range: DateRange
 
-    field_of_study: Optional[str] = Field(
-        default=None, description="Major, specialization, or field of study."
-    )
+    location: str | None = None
 
-    date_range: Optional[DateRange] = Field(
-        default=None, description="Education period when available."
-    )
-
-    location: Optional[str] = Field(
-        default=None, description="Institution location when available."
-    )
-
-    source_text: Optional[str] = Field(
-        default=None,
-        description=("Original resume text supporting this " "education entry."),
-    )
-
-    evidence: list[ExtractionEvidence] = Field(
-        default_factory=list, description="Evidence supporting this education entry."
-    )
-
-
-# ============================================================
-# Certifications
-# ============================================================
+    source_text: str | None = None
+    evidence: list[ExtractionEvidence] = Field(default_factory=list)
 
 
 class Certification(BaseModel):
-    """
-    Professional certification extracted from the resume.
-    """
-    id: str = Field(
-        default_factory=lambda: generate_id("achievement")
-    )
+    model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(description="Certification name.")
+    id: str
+    name: str
+    issuer: str | None = None
+    date: str | None = None
+    credential_id: str | None = None
+    credential_url: str | None = None
 
-    issuer: Optional[str] = Field(
-        default=None, description="Organization that issued the certification."
-    )
-
-    date: Optional[str] = Field(
-        default=None, description="Certification date when available."
-    )
-
-    credential_id: Optional[str] = Field(
-        default=None, description="Certification credential ID when available."
-    )
-
-    credential_url: Optional[str] = Field(
-        default=None, description="Certification verification URL when available."
-    )
-
-    source_text: Optional[str] = Field(
-        default=None, description="Original resume text supporting this certification."
-    )
-
-    evidence: list[ExtractionEvidence] = Field(
-        default_factory=list, description="Evidence supporting the extraction."
-    )
-
-
-# ============================================================
-# Projects
-# ============================================================
+    source_text: str | None = None
+    evidence: list[ExtractionEvidence] = Field(default_factory=list)
 
 
 class Project(BaseModel):
-    """
-    A project listed on the resume.
-    """
-    id: str = Field(
-        default_factory=lambda: generate_id("achievement")
-    )
-
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(description="Project name.")
+    id: str
+    name: str
+    description: str | None = None
 
-    description: Optional[str] = Field(default=None, description="Project description.")
+    technologies: list[str] = Field(default_factory=list)
+    achievements: list[Achievement] = Field(default_factory=list)
 
-    technologies: list[str] = Field(
-        default_factory=list,
-        description=("Technologies explicitly mentioned in " "the project."),
-    )
-
-    achievements: list[Achievement] = Field(
-        default_factory=list,
-        description=(
-            "Achievements or meaningful contributions " "associated with the project."
-        ),
-    )
-
-    source_text: Optional[str] = Field(
-        default=None, description=("Original resume text representing " "this project.")
-    )
-
-    evidence: list[ExtractionEvidence] = Field(
-        default_factory=list, description="Evidence supporting this project."
-    )
-
-
-# ============================================================
-# Resume Metadata
-# ============================================================
+    source_text: str | None = None
+    evidence: list[ExtractionEvidence] = Field(default_factory=list)
 
 
 class ResumeMetadata(BaseModel):
-    """
-    Metadata owned by HelloBuddy rather than extracted
-    from the resume by the LLM.
-    """
-
     model_config = ConfigDict(extra="forbid")
 
-    source_file: Optional[str] = None
-
-    source_format: Optional[str] = None
-
-    parser_version: str = "2.0-llm"
-
-    raw_text: Optional[str] = Field(
-        default=None,
-        description=(
-            "Complete text extracted from the source " "document before LLM processing."
-        ),
-    )
-
-
-# ============================================================
-# Canonical Resume AST
-# ============================================================
+    source_file: str | None = None
+    source_format: str | None = None
+    parser_version: str = "3.0-llm"
+    raw_text: str | None = None
 
 
 class ResumeAST(BaseModel):
-    """
-    Canonical structured representation of a resume.
-
-    This is the central contract used by:
-
-        Document Reader
-              ↓
-        LLM Resume Extractor
-              ↓
-           ResumeAST
-              ↓
-        Validation
-              ↓
-        ATS Analysis
-              ↓
-        Resume Optimization
-    """
-
     model_config = ConfigDict(extra="forbid")
 
     metadata: ResumeMetadata = Field(default_factory=ResumeMetadata)
-
     contact: ContactInformation = Field(default_factory=ContactInformation)
+    summary: str | None = None
 
-    summary: Optional[str] = Field(
-        default=None,
-        description=(
-            "Professional summary or objective exactly " "as represented in the resume."
-        ),
-    )
+    experience: list[Experience] = Field(default_factory=list)
+    skills: list[Skill] = Field(default_factory=list)
+    education: list[Education] = Field(default_factory=list)
+    certifications: list[Certification] = Field(default_factory=list)
+    projects: list[Project] = Field(default_factory=list)
 
-    experience: list[Experience] = Field(
-        default_factory=list, description="Professional experience entries."
-    )
-
-    skills: list[Skill] = Field(
-        default_factory=list, description="Skills explicitly present in the resume."
-    )
-
-    education: list[Education] = Field(
-        default_factory=list, description="Education entries."
-    )
-
-    certifications: list[Certification] = Field(
-        default_factory=list, description="Professional certifications."
-    )
-
-    projects: list[Project] = Field(
-        default_factory=list, description="Projects listed on the resume."
-    )
-    # Original text extracted from the resume.
-    #
-    # This is intentionally kept at the ResumeAST level
-    # because it represents the complete source document.
-    source_text: Optional[str] = Field(
-        default=None,
-        description=(
-            "Complete original text extracted from the "
-            "resume document. Used for provenance, "
-            "debugging, re-processing and ATS analysis."
-        ),
-    )
+    source_text: str | None = None

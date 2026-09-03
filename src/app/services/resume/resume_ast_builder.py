@@ -1,287 +1,483 @@
-from typing import Optional
-from datetime import date
+"""
+Build the canonical ResumeAST from the LLM extraction model.
+
+Application-owned responsibilities:
+- canonical IDs
+- date normalization
+- provenance conversion
+- experience/project relationship resolution
+- deterministic structural validation
+"""
+
+from __future__ import annotations
+
+import re
+from datetime import date, datetime
+from typing import Iterable
 
 from app.models.resume.resume_ast import (
-    ResumeAST,
-    Experience,
     Achievement,
-    Education,
-    Skill,
     Certification,
-    Project,
+    ContactInformation,
     DateRange,
+    Education,
+    Experience,
     ExtractionEvidence,
+    Project,
+    ResumeAST,
     ResumeMetadata,
+    Skill,
 )
-
 from app.models.resume.resume_extraction import (
+    ExtractedAchievement,
+    ExtractedCertification,
+    ExtractedContactInformation,
+    ExtractedDateRange,
+    ExtractedEducation,
+    ExtractedEvidence,
+    ExtractedExperience,
+    ExtractedProject,
+    ExtractedSkill,
     ResumeExtraction,
 )
+from uuid import uuid4
+
+
+def generate_id(prefix: str) -> str:
+    return f"{prefix}_{uuid4().hex[:12]}"
 
 
 class ResumeASTBuilder:
-    """
-    Converts LLM ResumeExtraction into the canonical
-    application ResumeAST.
 
-    This is application-owned logic and does not depend
-    on Gemini/OpenAI.
-    """
+    PARSER_VERSION = "3.0-llm"
 
     def build(
         self,
         extraction: ResumeExtraction,
         source_text: str,
-        source_file: Optional[str] = None,
-        source_format: Optional[str] = None,
+        source_file: str | None = None,
+        source_format: str | None = None,
     ) -> ResumeAST:
 
-        return ResumeAST(
-            source_text=source_text,
-            metadata=self._build_metadata(
+        projects = [
+            self._build_project(project)
+            for project in extraction.projects
+        ]
+
+        project_lookup = self._build_project_lookup(projects)
+
+        experiences = [
+            self._build_experience(
+                item,
+                project_lookup=project_lookup,
+            )
+            for item in extraction.experience
+        ]
+
+        resume = ResumeAST(
+            metadata=ResumeMetadata(
                 source_file=source_file,
                 source_format=source_format,
+                parser_version=self.PARSER_VERSION,
+                raw_text=source_text,
+            ),
+            contact=self._build_contact(
+                extraction.contact
             ),
             summary=extraction.summary,
-            experience=[
-                self._build_experience(item) for item in extraction.experiences
-            ],
-            education=[self._build_education(item) for item in extraction.education],
+            experience=experiences,
             skills=[
-                Skill(
-                    name=item.name,
-                    category=item.category,
-                )
+                self._build_skill(item)
                 for item in extraction.skills
             ],
+            education=[
+                self._build_education(item)
+                for item in extraction.education
+            ],
             certifications=[
-                Certification(
-                    name=item.name,
-                    issuer=item.issuer,
-                    date=item.date,
-                    credential_id=item.credential_id,
-                    credential_url=item.credential_url,
-                )
+                self._build_certification(item)
                 for item in extraction.certifications
             ],
-            projects=[self._build_project(item) for item in extraction.projects],
+            projects=projects,
+            source_text=source_text,
         )
 
-    @staticmethod
-    def _build_date_range(
-        start_date: str | None,
-        end_date: str | None,
-    ) -> DateRange | None:
+        self._validate_relationships(resume)
 
-        # Don't create an empty DateRange.
-        if not start_date and not end_date:
-            return None
+        return resume
 
-        return DateRange(
-            start_date=start_date,
-            end_date=end_date,
+    # ------------------------------------------------------------------
+    # CONTACT
+    # ------------------------------------------------------------------
+
+    def _build_contact(
+        self,
+        item: ExtractedContactInformation,
+    ) -> ContactInformation:
+
+        return ContactInformation(
+            name=item.name,
+            email=item.email,
+            phone=item.phone,
+            location=item.location,
+            linkedin=item.linkedin,
+            github=item.github,
+            portfolio=item.portfolio,
+            source_text=item.source_text,
+            evidence=[
+                self._build_evidence(e)
+                for e in item.evidence
+            ],
         )
 
-    @staticmethod
+    # ------------------------------------------------------------------
+    # EXPERIENCE
+    # ------------------------------------------------------------------
+
     def _build_experience(
-        item,
+        self,
+        item: ExtractedExperience,
+        *,
+        project_lookup: dict[str, Project],
     ) -> Experience:
 
-        date_range = ResumeASTBuilder._build_date_range(
-            start_date=item.start_date,
-            end_date=item.end_date,
-        )
+        project_ids: list[str] = []
+
+        for project_name in item.project_names:
+            project = self._lookup_project(
+                project_name,
+                project_lookup,
+            )
+
+            if project is not None:
+                if project.id not in project_ids:
+                    project_ids.append(project.id)
 
         return Experience(
+            id=generate_id("experience"),
             company=item.company,
-            title=item.job_title,
+            title=item.title,
+            date_range=self._build_date_range(
+                item.date_range
+            ),
             location=item.location,
-            date_range=date_range,
+            description=item.description,
             achievements=[
-                Achievement(text=achievement.text) for achievement in item.achievements
+                self._build_achievement(a)
+                for a in item.achievements
+            ],
+            project_ids=project_ids,
+            source_text=item.source_text,
+            evidence=[
+                self._build_evidence(e)
+                for e in item.evidence
+            ],
+        )
+
+    # ------------------------------------------------------------------
+    # PROJECT
+    # ------------------------------------------------------------------
+
+    def _build_project(
+        self,
+        item: ExtractedProject,
+    ) -> Project:
+
+        return Project(
+            id=generate_id("project"),
+            name=item.name,
+            description=item.description,
+            technologies=self._deduplicate(
+                item.technologies
+            ),
+            achievements=[
+                self._build_achievement(a)
+                for a in item.achievements
+            ],
+            source_text=item.source_text,
+            evidence=[
+                self._build_evidence(e)
+                for e in item.evidence
+            ],
+        )
+
+    # ------------------------------------------------------------------
+    # ACHIEVEMENT
+    # ------------------------------------------------------------------
+
+    def _build_achievement(
+        self,
+        item: ExtractedAchievement,
+    ) -> Achievement:
+
+        return Achievement(
+            id=generate_id("achievement"),
+            text=item.text,
+            action=item.action,
+            technologies=self._deduplicate(
+                item.technologies
+            ),
+            skills=self._deduplicate(
+                item.skills
+            ),
+            metrics=self._deduplicate(
+                item.metrics
+            ),
+            impact=item.impact,
+            source_text=item.source_text,
+            evidence=[
+                self._build_evidence(e)
+                for e in item.evidence
+            ],
+        )
+
+    # ------------------------------------------------------------------
+    # SKILL
+    # ------------------------------------------------------------------
+
+    def _build_skill(
+        self,
+        item: ExtractedSkill,
+    ) -> Skill:
+
+        return Skill(
+            id=generate_id("skill"),
+            name=item.name,
+            category=item.category,
+            proficiency=item.proficiency,
+            source_text=item.source_text,
+            evidence=[
+                self._build_evidence(e)
+                for e in item.evidence
+            ],
+        )
+
+    # ------------------------------------------------------------------
+    # EDUCATION
+    # ------------------------------------------------------------------
+
+    def _build_education(
+        self,
+        item: ExtractedEducation,
+    ) -> Education:
+
+        return Education(
+            id=generate_id("education"),
+            institution=item.institution,
+            degree=item.degree,
+            field_of_study=item.field_of_study,
+            date_range=self._build_date_range(
+                item.date_range
+            ),
+            location=item.location,
+            source_text=item.source_text,
+            evidence=[
+                self._build_evidence(e)
+                for e in item.evidence
+            ],
+        )
+
+    # ------------------------------------------------------------------
+    # CERTIFICATION
+    # ------------------------------------------------------------------
+
+    def _build_certification(
+        self,
+        item: ExtractedCertification,
+    ) -> Certification:
+
+        return Certification(
+            id=generate_id("certification"),
+            name=item.name,
+            issuer=item.issuer,
+            date=item.date,
+            credential_id=item.credential_id,
+            credential_url=item.credential_url,
+            source_text=item.source_text,
+            evidence=[
+                self._build_evidence(e)
+                for e in item.evidence
+            ],
+        )
+
+    # ------------------------------------------------------------------
+    # DATE
+    # ------------------------------------------------------------------
+
+    def _build_date_range(
+        self,
+        item: ExtractedDateRange,
+    ) -> DateRange:
+
+        source_text = item.source_text
+
+        current = item.current
+        end_date = item.end_date
+
+        if self._contains_current_marker(source_text):
+            current = True
+            end_date = None
+
+        if current:
+            end_date = None
+
+        return DateRange(
+            start_date=item.start_date,
+            end_date=end_date,
+            current=current,
+            source_text=source_text,
+            evidence=[
+                self._build_evidence(e)
+                for e in item.evidence
             ],
         )
 
     @staticmethod
-    def _parse_date(
-        value: Optional[str],
-    ) -> Optional[date]:
-        """
-        Convert an LLM-extracted date string into datetime.date.
+    def _contains_current_marker(
+        source_text: str | None,
+    ) -> bool:
 
-        The LLM is instructed to return ISO dates where possible,
-        but resumes can contain less precise dates.
+        if not source_text:
+            return False
 
-        We therefore deliberately fail soft here.
-        """
+        text = source_text.lower().strip()
 
-        if not value:
-            return None
+        markers = (
+            "till date",
+            "till present",
+            "to date",
+            "to present",
+            "present",
+            "current",
+            "ongoing",
+        )
 
-        value = value.strip()
+        return any(marker in text for marker in markers)
 
-        # -----------------------------------------
-        # ISO date
-        # -----------------------------------------
+    # ------------------------------------------------------------------
+    # EVIDENCE
+    # ------------------------------------------------------------------
 
-        try:
-            return date.fromisoformat(value)
-        except ValueError:
-            pass
+    @staticmethod
+    def _build_evidence(
+        item: ExtractedEvidence,
+    ) -> ExtractionEvidence:
 
-        # -----------------------------------------
-        # Year only
-        #
-        # Example:
-        #     "2021"
-        #
-        # We normalize this to January 1st.
-        # The original value is still preserved in
-        # DateRange.source_text.
-        # -----------------------------------------
+        # LLM supplies qualitative quality.
+        # Application derives numeric confidence.
+        quality_to_confidence = {
+            "high": 1.0,
+            "medium": 0.75,
+            "low": 0.40,
+        }
 
-        if len(value) == 4 and value.isdigit():
-            try:
-                return date(
-                    int(value),
-                    1,
-                    1,
-                )
-            except ValueError:
-                pass
+        return ExtractionEvidence(
+            source_text=item.source_text,
+            source_section=item.source_section,
+            quality=item.quality,
+            reason=item.reason,
+            confidence=quality_to_confidence.get(
+                item.quality,
+                0.40,
+            ),
+            needs_review=item.quality != "high",
+            extraction_method="llm",
+        )
 
-        # -----------------------------------------
-        # Unknown / non-normalizable date
-        #
-        # Examples:
-        #     "Present"
-        #     "Current"
-        #     "Jan 2021"
-        #
-        # Don't guess.
-        # -----------------------------------------
+    # ------------------------------------------------------------------
+    # PROJECT RELATIONSHIPS
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_project_lookup(
+        projects: list[Project],
+    ) -> dict[str, Project]:
+
+        return {
+            ResumeASTBuilder._normalize_name(project.name): project
+            for project in projects
+        }
+
+    @staticmethod
+    def _lookup_project(
+        project_name: str,
+        project_lookup: dict[str, Project],
+    ) -> Project | None:
+
+        normalized = ResumeASTBuilder._normalize_name(
+            project_name
+        )
+
+        exact = project_lookup.get(normalized)
+
+        if exact is not None:
+            return exact
+
+        # Conservative matching only. The LLM has already established
+        # the relationship; this only tolerates harmless formatting
+        # differences in the project name.
+        for name, project in project_lookup.items():
+            if normalized == name:
+                return project
 
         return None
 
     @staticmethod
-    def _build_metadata(
-        source_file: Optional[str],
-        source_format: Optional[str],
-    ) -> ResumeMetadata:
+    def _validate_relationships(
+        resume: ResumeAST,
+    ) -> None:
 
-        return ResumeMetadata(
-            source_file=source_file,
-            source_format=source_format,
-        )
+        project_ids = {
+            project.id
+            for project in resume.projects
+        }
 
-    @staticmethod
-    def _build_experience(
-        item,
-    ) -> Experience:
+        for experience in resume.experience:
 
-        date_range = None
-
-        if item.start_date or item.end_date:
-
-            date_range = ResumeASTBuilder._build_date_range(
-                start_date=item.start_date,
-                end_date=item.end_date,
+            missing = (
+                set(experience.project_ids)
+                - project_ids
             )
 
-        return Experience(
-            company=item.company,
-            title=item.job_title,
-            location=item.location,
-            date_range=date_range,
-            achievements=[
-                Achievement(text=achievement.text) for achievement in item.achievements
-            ],
+            if missing:
+                raise ValueError(
+                    f"Experience '{experience.company}' references "
+                    f"unknown project IDs: {sorted(missing)}"
+                )
+
+    # ------------------------------------------------------------------
+    # HELPERS
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_name(
+        value: str,
+    ) -> str:
+
+        return re.sub(
+            r"\s+",
+            " ",
+            value.strip().lower(),
         )
 
     @staticmethod
-    def _build_education(
-        item,
-    ) -> Education:
+    def _deduplicate(
+        values: Iterable[str],
+    ) -> list[str]:
 
-        date_range = None
+        result: list[str] = []
+        seen: set[str] = set()
 
-        if item.start_date or item.end_date:
+        for value in values:
+            value = value.strip()
 
-            date_range = ResumeASTBuilder._build_date_range(
-                start_date=item.start_date,
-                end_date=item.end_date,
-            )
+            if not value:
+                continue
 
-        return Education(
-            institution=item.institution,
-            degree=item.degree,
-            field_of_study=item.field_of_study,
-            date_range=date_range,
-        )
+            key = value.lower()
 
-    @staticmethod
-    def _build_project(
-        item,
-    ) -> Project:
+            if key not in seen:
+                seen.add(key)
+                result.append(value)
 
-        return Project(
-            name=item.name,
-            description=item.description,
-            technologies=item.technologies,
-            achievements=[
-                Achievement(text=achievement.text) for achievement in item.achievements
-            ],
-        )
-
-    @staticmethod
-    def _build_date_range(
-        start_date: Optional[str],
-        end_date: Optional[str],
-    ) -> Optional[DateRange]:
-
-        if not start_date and not end_date:
-            return None
-
-        normalized_start = ResumeASTBuilder._parse_date(start_date)
-
-        normalized_end = ResumeASTBuilder._parse_date(end_date)
-
-        # -----------------------------------------
-        # Determine whether the role is current.
-        # -----------------------------------------
-
-        current = False
-
-        if end_date:
-
-            current = end_date.strip().lower() in {
-                "present",
-                "current",
-                "ongoing",
-                "now",
-            }
-
-        # -----------------------------------------
-        # Preserve exactly what the LLM extracted.
-        # -----------------------------------------
-
-        source_parts = []
-
-        if start_date:
-            source_parts.append(start_date)
-
-        if end_date:
-            source_parts.append(end_date)
-
-        source_text = " - ".join(source_parts) if source_parts else None
-
-        # -----------------------------------------
-        # Build canonical DateRange
-        # -----------------------------------------
-
-        return DateRange(
-            start_date=normalized_start,
-            end_date=normalized_end,
-            current=current,
-            source_text=source_text,
-        )
+        return result
