@@ -11,6 +11,7 @@ from app.models.resume.optimization import (
     SectionOptimizationLLMResult,
 )
 from app.models.resume.resume_ast import ResumeAST
+from app.services.resume.optimization_policy import editable_fields_text
 
 
 class SectionOptimizer:
@@ -30,11 +31,13 @@ class SectionOptimizer:
         mode: OptimizationMode,
         guidelines: list[OptimizationGuideline],
         job_description: str | None = None,
+        excluded_record_ids: set[str] | None = None,
     ) -> SectionOptimizationLLMResult:
 
         section_data = self._get_section_data(
             resume,
             section,
+            excluded_record_ids=excluded_record_ids or set(),
         )
 
         system_prompt = self._build_system_prompt()
@@ -57,6 +60,8 @@ class SectionOptimizer:
     def _get_section_data(
         resume: ResumeAST,
         section: ResumeSection,
+        *,
+        excluded_record_ids: set[str] | None = None,
     ) -> Any:
         if section == ResumeSection.SUMMARY:
             return {
@@ -65,94 +70,103 @@ class SectionOptimizer:
                 "text": resume.summary,
             }
 
-        return getattr(resume, section.value)
+        excluded_record_ids = excluded_record_ids or set()
+
+        if section == ResumeSection.EXPERIENCE:
+            projects_by_id = {
+                project.id: project
+                for project in resume.projects
+            }
+
+            result = []
+            for experience in resume.experience:
+                result.append({
+                    "record": experience.model_dump(mode="json"),
+                    "associated_projects": [
+                        projects_by_id[project_id].model_dump(mode="json")
+                        for project_id in experience.project_ids
+                        if project_id in projects_by_id
+                        and project_id not in excluded_record_ids
+                    ],
+                })
+            return result
+
+        records = getattr(resume, section.value)
+        if section == ResumeSection.PROJECTS and excluded_record_ids:
+            return [
+                record
+                for record in records
+                if record.id not in excluded_record_ids
+            ]
+
+        return records
 
     @staticmethod
     def _build_system_prompt() -> str:
-
         return """
 You are an expert ATS resume optimization engine.
 
-Your job is to propose improvements to existing resume text.
+Inspect the supplied resume section and propose concrete, factual, high-value
+improvements to existing narrative text. Python owns the ResumeAST; you only
+propose text replacements.
 
-You DO NOT own the resume structure.
+IMMUTABLE FACTS
+- record IDs
+- company names, job titles, dates/date ranges, locations
+- technologies, tools, skills
+- metrics, numbers, percentages, monetary values and scale
+- education and certifications
+- credential IDs/URLs
+- project relationships
+- source_text and evidence/provenance
 
-You DO NOT reconstruct ResumeAST objects.
+Never invent facts, responsibilities, achievements, outcomes, metrics,
+technologies, skills, dates, users, revenue, team sizes or performance claims.
 
-You DO NOT create, delete, merge, split, or reorder records.
+CHANGE CONTRACT
+Each change must contain only:
+- record_id: an existing record ID
+- field: an editable field from EDITABLE FIELDS
+- change_type: rewrite or normalize
+- optimized_text: replacement plain text
+- guideline_id: a supplied guideline ID
+- reason: concise explanation
 
-You DO NOT modify:
-- company names
-- job titles
-- dates
-- education
-- certifications
-- technologies unless only spelling/normalization is explicitly supported
-- metrics
-- numbers
-- scope
-- factual claims
-- record identity
+Do NOT return original_text. The application obtains the authoritative
+original text from the ResumeAST.
 
-You may improve wording of existing textual fields.
+OPTIMIZATION STANDARD
+Look for material improvements in clarity, precision, action orientation,
+achievement orientation where supported, ATS terminology already present,
+concision, readability, and removal of vague/repetitive/filler wording.
+Prefer ACTION + WHAT + HOW + SCOPE/OUTCOME only when those facts are supported.
 
-Absolute fact-preservation rule:
+GENERAL ATS MODE
+Do not mechanically rewrite every bullet. But do not return an empty change
+list merely because the resume is reasonably good. Inspect the editable text
+records and identify the highest-value opportunities. When material
+improvements exist, normally propose 1-5 concrete changes for a substantial
+section. Prefer high-value changes over cosmetic edits.
 
-Never invent:
-- technologies
-- tools
-- responsibilities
-- achievements
-- metrics
-- percentages
-- users
-- revenue
-- performance improvements
-- team sizes
-- dates
-- certifications
-- education
-- outcomes
+If a section genuinely needs no textual improvement, return optimized=false,
+changes=[], and findings explaining what was reviewed and why no change is
+warranted.
 
-An optimized statement must be supported by the original statement.
+TARGETED JD MODE
+Use the supplied job description to improve alignment only where the resume
+already contains supporting evidence. Never add missing facts merely because
+they appear in the JD.
 
-Prefer:
-
-ACTION + WHAT + HOW + SCOPE/CONTEXT + OUTCOME
-
-but only include components that are supported by the source.
-
-Improve:
-1. clarity
-2. achievement orientation
-3. strong action verbs
-4. ATS terminology normalization
-5. concision
-6. readability
-
-Do not make text longer merely for the sake of optimization.
-
-Return optimization proposals only.
-
-Each change must identify:
-- the existing record ID
-- the field to change
-- the original text
-- the optimized text
-- the guideline
-- the reason
-
-The optimized_text must be plain text.
-
-Do not return JSON inside strings.
-Do not return ResumeAST objects.
+EDITABLE FIELDS are authoritative. If the value is "none", return no changes.
 
 Record identification rules:
-
 - Never invent record IDs.
-- For the summary section, always use record_id="summary".
-- For the summary section, the only optimizable field is "summary".
-- For all other sections, use the existing record ID from the supplied ResumeAST.
+- Summary: record_id="summary", field="summary".
+- Achievement text: existing achievement ID, field="text".
+- Project description: existing project ID, field="description".
+- Experience description: existing experience ID, field="description".
+
+Return one structured SectionOptimizationLLMResult and nothing else.
 """
 
     @staticmethod
@@ -190,8 +204,14 @@ GUIDELINES:
 JOB DESCRIPTION:
 {job_description or "No target job description supplied."}
 
+EDITABLE FIELDS FOR THIS SECTION:
+{editable_fields_text(section)}
+
 IMPORTANT:
-Only propose changes to existing text.
+- Inspect every editable narrative record in the supplied section data.
+- If material improvements exist, return 1-5 concrete changes.
+- Do not return original_text; Python obtains it from the AST.
+- Do not invent or alter immutable facts.
 
 RESUME SECTION DATA:
 {json.dumps(

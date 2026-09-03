@@ -170,7 +170,11 @@ Required:
 - evidence
 
 If multiple titles are listed together for one employment,
-preserve them as represented.
+preserve all titles belonging to that employer as one title string.
+Do NOT carry titles from the next employer into the current employer.
+When the source uses a table such as "Positions Held / Company / Duration",
+use the company and duration rows as the boundary for each employment.
+A new company name starts a new employment record.
 
 Do not create an experience record from a project or publication.
 
@@ -178,8 +182,14 @@ Do not create an experience record from a project or publication.
 6. EXPERIENCE ACHIEVEMENTS
 ============================================================
 
-Responsibilities and meaningful work performed under an employment
+Responsibilities and meaningful work performed directly under an employment
 record should normally be extracted as achievements.
+
+IMPORTANT DISTINCTION:
+- If a bullet appears under a named project, put it in that project's achievements.
+- If a bullet appears directly under an employer/role and is not assigned to a
+  named project, put it in the employment's achievements.
+- Do not duplicate a project bullet into experience.
 
 Preserve the original meaning and wording.
 

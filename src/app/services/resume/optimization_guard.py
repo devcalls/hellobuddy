@@ -33,6 +33,14 @@ def validate_text_change(
 
     errors: list[str] = []
 
+    if not optimized_text or not optimized_text.strip():
+        errors.append("Optimization produced empty text.")
+        return errors
+
+    if original_text.strip() == optimized_text.strip():
+        errors.append("Optimization did not change the text.")
+        return errors
+
     original_numbers = extract_numbers(
         original_text
     )

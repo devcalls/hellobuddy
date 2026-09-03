@@ -74,7 +74,6 @@ class OptimizationChange(BaseModel):
 
     change_type: ChangeType = ChangeType.REWRITE
 
-    original_text: str
     optimized_text: str
 
     guideline_id: str

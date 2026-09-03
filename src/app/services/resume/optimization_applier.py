@@ -11,6 +11,7 @@ from app.models.resume.resume_ast import ResumeAST
 from app.services.resume.optimization_guard import (
     validate_text_change,
 )
+from app.services.resume.optimization_policy import is_field_editable
 
 
 class OptimizationApplier:
@@ -29,6 +30,16 @@ class OptimizationApplier:
         applied = 0
 
         for change in changes:
+
+            # Defense in depth: never allow the LLM to mutate a structured
+            # ResumeAST field, even if the prompt asks it to do so.
+            if not is_field_editable(section, change.field):
+                errors.append(
+                    f"{section.value}: "
+                    f"{change.record_id}.{change.field}: "
+                    "field is immutable and cannot be optimized."
+                )
+                continue
 
             try:
                 current_value = self._get_field(
@@ -50,14 +61,9 @@ class OptimizationApplier:
                 )
                 continue
 
-            if current_value != change.original_text:
-                errors.append(
-                    f"{section.value}: "
-                    f"{change.record_id}.{change.field} "
-                    f"original text does not match ResumeAST."
-                )
-                continue
-
+            # The AST is authoritative for the original text. The LLM
+            # does not echo original_text, avoiding false mismatches caused
+            # by harmless whitespace or line-wrapping differences.
             guard_errors = validate_text_change(
                 original_text=current_value,
                 optimized_text=change.optimized_text,
@@ -124,6 +130,23 @@ class OptimizationApplier:
 
         parts = field.split(".")
 
+        if field in {
+            "id",
+            "company",
+            "title",
+            "date_range",
+            "project_ids",
+            "technologies",
+            "skills",
+            "metrics",
+            "impact",
+            "source_text",
+            "evidence",
+        }:
+            raise ValueError(
+                f"Field '{field}' is not an optimizer-owned text field."
+            )
+
         target = record
 
         for part in parts[:-1]:
@@ -161,6 +184,33 @@ class OptimizationApplier:
                 f"Summary record '{record_id}' not found. "
                 f"Expected record_id='summary'."
             )
+
+        # EXPERIENCE optimization may legitimately target achievement text
+        # belonging to a project associated with that employment. The project
+        # remains a top-level AST entity; this lookup only resolves the reference.
+        if section == ResumeSection.EXPERIENCE:
+            for experience in resume.experience:
+                if experience.id == record_id:
+                    return experience
+
+            referenced_project_ids = {
+                project_id
+                for experience in resume.experience
+                for project_id in experience.project_ids
+            }
+
+            for project in resume.projects:
+                if project.id not in referenced_project_ids:
+                    continue
+                if project.id == record_id:
+                    return project
+
+                nested = self._search_by_id(
+                    project.achievements,
+                    record_id,
+                )
+                if nested is not None:
+                    return nested
 
         section_data = getattr(
             resume,
