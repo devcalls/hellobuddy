@@ -159,23 +159,14 @@ SEARCH_COUNTRY = <YOUR_JOB_SEARCH_COUNTRY CODE>  # e.g., "us" for United States,
 With your virtual environment active and your `job_config.ini` completely filled out, kickstart the background worker by running the following command from the project root folder:
 
 ```bash
-cd src
-python3 -m app.main
+hellobuddy job-search
 
 ```
-
-> **💡 Run in Background:** If you are running this on a remote server or want to close your terminal without killing the app, you can use background utilities like `nohup` or `tmux` on Linux/macOS:
-> ```bash
-> python3 -m app.main
-> 
-> ```
-> 
-> 
 
 ---
 
 # 🤝 Happy Job Hunting!
 
-Sit back, relax, and let **HelloBuddy Lite** keep its eyes on the market for you. If you need to stop the scheduler at any time, simply press `CTRL + C` in your active terminal session.
+Sit back, relax, and let **HelloBuddy** keep its eyes on the market for you. If you need to stop the scheduler at any time, simply press `CTRL + C` in your active terminal session.
 
 ```
