@@ -30,6 +30,10 @@ from app.services.resume.resume_parser_service import (
 from app.services.resume.section_optimizer import (
     SectionOptimizer,
 )
+from app.models.resume.resume_ast import ResumeAST
+from app.services.resume.resume_renderer_service import (
+    ResumeRendererService,
+)
 
 
 resume_settings = ResumeSettings()
@@ -554,3 +558,21 @@ def optimize_resume(
         )
 
         return 1
+    
+def render_resume_pdf(
+    input_path: str,
+    output_path: str | None = None,
+) -> Path:
+    renderer = ResumeRendererService()
+    resume = renderer.load_resume_ast(input_path)
+
+    if output_path is None:
+        output_path = (
+            Path(input_path).with_suffix(".pdf")
+        )
+
+
+    return renderer.render_pdf(
+        resume=resume,
+        output_path=output_path,
+    )

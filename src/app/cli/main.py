@@ -6,6 +6,7 @@ from app.cli.job_search import run_job_search
 from app.cli.resume import (
     optimize_resume,
     parse_resume,
+    render_resume_pdf
 )
 
 VERSION = "1.0.1"
@@ -118,6 +119,27 @@ def build_parser():
         default=None,
         help=("Section to optimize. Can be specified " "multiple times."),
     )
+    
+    # --------------------------------------------------
+    # resume render
+    # --------------------------------------------------
+
+    render_parser = resume_subparsers.add_parser(
+        "render",
+        help="Render a ResumeAST or optimization result to PDF",
+    )
+
+    render_parser.add_argument(
+        "file_path",
+        help="Path to ResumeAST JSON or optimization result JSON",
+    )
+
+    render_parser.add_argument(
+        "--output",
+        "-o",
+        default=None,
+        help="Write rendered PDF to this file",
+    )
 
     return parser, resume_parser
 
@@ -174,6 +196,51 @@ def main():
                 mode=args.mode,
                 sections=args.section,
                 input_type=args.input_type,
+            )
+            
+            
+            # ==================================================
+    # Resume
+    # ==================================================
+
+    if args.command == "resume":
+
+        if args.resume_command is None:
+            resume_parser.print_help()
+            return 0
+
+        # --------------------------------------------------
+        # resume parse
+        # --------------------------------------------------
+
+        if args.resume_command == "parse":
+            return parse_resume(
+                file_path=args.file_path,
+                output=args.output,
+            )
+
+        # --------------------------------------------------
+        # resume optimize
+        # --------------------------------------------------
+
+        if args.resume_command == "optimize":
+            return optimize_resume(
+                file_path=args.file_path,
+                output=args.output,
+                mode=args.mode,
+                sections=args.section,
+                input_type=args.input_type,
+            )
+
+        # --------------------------------------------------
+        # resume render
+        # --------------------------------------------------
+       
+        
+        if args.resume_command == "render":
+            return render_resume_pdf(
+                input_path=args.file_path,
+                output_path=args.output,
             )
 
     parser.print_help()
