@@ -10,7 +10,7 @@ from app.cli.resume import (
     render_resume_pdf
 )
 
-VERSION = "1.0.1"
+VERSION = "1.0.3"
 
 
 def build_parser():
@@ -51,12 +51,12 @@ def build_parser():
 
     image_extract_parser = image_subparsers.add_parser(
         "extract",
-        help="Extract structured data from an image",
+        help="Extract one or many invoices",
     )
 
     image_extract_parser.add_argument(
-        "file_path",
-        help="Path to the image file",
+        "input_path",
+        help="Path to an invoice image or a directory of invoice images",
     )
 
     image_extract_parser.add_argument(
@@ -69,9 +69,37 @@ def build_parser():
 
     image_extract_parser.add_argument(
         "--output",
-        "-o",
+        dest="output_format",
+        choices=["json", "csv", "google-sheets"],
         default=None,
-        help="Write extracted data to JSON file",
+        help="Output format. Defaults to image_config.ini.",
+    )
+
+    image_extract_parser.add_argument(
+        "-o",
+        "--output-file",
+        dest="output_path",
+        default=None,
+        help="Output file path for JSON or CSV.",
+    )
+
+    image_extract_parser.add_argument(
+        "--spreadsheet",
+        default=None,
+        help="Google Sheets spreadsheet ID or name.",
+    )
+
+    image_extract_parser.add_argument(
+        "--worksheet",
+        default=None,
+        help="Google Sheets worksheet name. Defaults to image_config.ini.",
+    )
+
+    image_extract_parser.add_argument(
+        "--credentials",
+        dest="credentials_file",
+        default=None,
+        help="Google service-account JSON file.",
     )
 
     image_ocr_parser = image_subparsers.add_parser(
@@ -226,9 +254,13 @@ def main():
 
         if args.image_command == "extract":
             return extract_image(
-                file_path=args.file_path,
-                output=args.output,
+                input_path=args.input_path,
+                output_format=args.output_format,
+                output_path=args.output_path,
                 document_type=args.document_type,
+                spreadsheet=args.spreadsheet,
+                worksheet=args.worksheet,
+                credentials_file=args.credentials_file,
             )
 
     if args.command == "resume":

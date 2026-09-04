@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,6 +18,9 @@ from app.models.image.ocr_document import BoundingBox
 class ExtractionEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # Field within the semantic model that this evidence supports.
+    # Examples: quantity, unit_price, amount, invoice_number, total.
+    field: str | None = None
     source_text: str
     bounding_box: BoundingBox | None = None
     ocr_confidence: float | None = Field(
@@ -41,6 +45,15 @@ class InvoiceLineItem(BaseModel):
     amount: Decimal | None = None
     evidence: list[ExtractionEvidence] = Field(default_factory=list)
 
+    # These are deterministic post-extraction annotations. The LLM does not
+    # decide whether a line item is suspicious.
+    suspicious: bool = False
+    suspicion_reasons: list[str] = Field(default_factory=list)
+    # Action-oriented post-extraction category:
+    # OK = no issues, REVIEW = low-confidence field(s) but arithmetic reconciles,
+    # URGENT = a validation inconsistency exists alongside low-confidence evidence.
+    category: Literal["OK", "REVIEW", "URGENT"] = "OK"
+
 
 class Invoice(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -63,6 +76,9 @@ class Invoice(BaseModel):
 
     subtotal: Decimal | None = None
     tax: Decimal | None = None
+    # Positive or negative according to the extracted invoice representation.
+    # The validator adds this value to subtotal + tax.
+    discount: Decimal | None = None
     total: Decimal | None = None
 
     evidence: dict[str, list[ExtractionEvidence]] = Field(

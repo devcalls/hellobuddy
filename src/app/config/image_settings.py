@@ -22,6 +22,16 @@ class OCRSettings(BaseModel):
 
 class ParserSettings(BaseModel):
     preserve_source_text: bool = True
+    low_ocr_confidence_threshold: float = Field(
+        default=0.50,
+        ge=0.0,
+        le=1.0,
+    )
+
+
+class OutputSettings(BaseModel):
+    default_format: str = "json"
+    default_worksheet: str = "Invoices"
 
 
 class ImageSettings(BaseFeatureSettings):
@@ -30,3 +40,4 @@ class ImageSettings(BaseFeatureSettings):
     ocr: OCRSettings
     llm: LLMSettings
     parser: ParserSettings
+    output: OutputSettings = Field(default_factory=OutputSettings)
