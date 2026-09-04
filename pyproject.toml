@@ -23,7 +23,8 @@ dependencies = [
     "pymupdf==1.28.2",
     "python-docx==1.2.0",
     "google-genai==2.21.0",
-    "reportlab==5.0.1"
+    "reportlab==5.0.1",
+    "easyocr==1.7.2"
 ]
 [project.scripts]
 hellobuddy = "app.cli.main:main"
